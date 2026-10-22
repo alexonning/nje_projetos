@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity, ArrowDownRight, ArrowUpRight, Bell, CalendarDays, Check,
   CheckCheck, ChevronDown, ChevronRight, Circle, CircleHelp, ClipboardList,
-  Clock3, Command, Ellipsis, FolderKanban, LayoutDashboard, ListFilter,
+  Clock3, Command, Ellipsis, FolderKanban, LayoutDashboard, ListFilter, LogOut,
   Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search,
   Settings2, SlidersHorizontal, Sparkles, Users as UsersIcon, X, Zap,
 } from "lucide-react";
@@ -30,6 +31,7 @@ async function apiRequest<T>(url: string, method = "GET", body?: unknown): Promi
     cache: "no-store",
   });
   const result = await response.json().catch(() => null) as { error?: string } | null;
+  if (response.status === 401 && typeof window !== "undefined") window.location.assign("/login");
   if (!response.ok) throw new Error(result?.error || "Não foi possível concluir a operação.");
   return result as T;
 }
@@ -76,7 +78,8 @@ function useThemePreference() {
   return [theme, setTheme] as const;
 }
 
-export default function WorkspaceApp() {
+export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
+  const router = useRouter();
   const [page, setPage] = useState("Dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
@@ -106,6 +109,8 @@ export default function WorkspaceApp() {
   const [userModal, setUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState({ name: "", email: "", jobTitle: "", phone: "" });
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirmation: "" });
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [theme, setTheme] = useThemePreference();
 
@@ -131,7 +136,8 @@ export default function WorkspaceApp() {
 
   useEffect(() => { void reloadWorkspace(); }, [reloadWorkspace]);
 
-  const currentUser = users.find((user) => user.email === "alex@workspace.dev") ?? users[0] ?? null;
+  const currentUser = users.find((user) => user.id === initialUser.id) ?? initialUser;
+  const isAdmin = currentUser.accessRole === "Administrador";
   const visibleTasks = useMemo(() => tasks.filter((task) =>
     (task.title + " " + task.project + " " + task.owner + " " + task.tags.join(" ")).toLowerCase().includes(search.toLowerCase())
     && (selectedProject === "Todos os projetos" || task.project === selectedProject),
@@ -201,12 +207,17 @@ export default function WorkspaceApp() {
   const openUserModal = (user?: User) => {
     setEditingUser(user ?? null);
     setUserForm({ name: user?.name ?? "", email: user?.email ?? "", jobTitle: user?.jobTitle ?? "", phone: user?.phone ?? "" });
+    setPasswordForm({ password: "", confirmation: "" });
     setUserModal(true);
   };
 
   const saveUser = async () => {
     if (!userForm.name.trim()) { notify("Informe o nome do usuário."); return; }
-    const body = { name: userForm.name.trim(), email: userForm.email.trim() || null, jobTitle: userForm.jobTitle.trim(), phone: userForm.phone.trim() };
+    if (!userForm.email.trim()) { notify("Informe o e-mail do usuário."); return; }
+    if (!editingUser && passwordForm.password.length < 12) { notify("A senha precisa ter ao menos 12 caracteres."); return; }
+    if (!editingUser && passwordForm.password !== passwordForm.confirmation) { notify("As senhas não coincidem."); return; }
+    const profile = { name: userForm.name.trim(), email: userForm.email.trim().toLowerCase(), jobTitle: userForm.jobTitle.trim(), phone: userForm.phone.trim() };
+    const body = editingUser ? profile : { ...profile, password: passwordForm.password, passwordConfirmation: passwordForm.confirmation };
     try {
       await apiRequest(editingUser ? `/api/users/${editingUser.id}` : "/api/users", editingUser ? "PATCH" : "POST", body);
       await reloadWorkspace();
@@ -214,6 +225,39 @@ export default function WorkspaceApp() {
       notify(editingUser ? "Usuário atualizado com sucesso." : "Usuário adicionado com sucesso.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível salvar o usuário.");
+    }
+  };
+
+  const saveUserPassword = async () => {
+    if (!editingUser) return;
+    if (passwordForm.password.length < 12) { notify("A senha precisa ter ao menos 12 caracteres."); return; }
+    if (passwordForm.password !== passwordForm.confirmation) { notify("As senhas não coincidem."); return; }
+    setPasswordBusy(true);
+    try {
+      await apiRequest(`/api/users/${editingUser.id}/password`, "POST", { password: passwordForm.password, passwordConfirmation: passwordForm.confirmation });
+      setPasswordForm({ password: "", confirmation: "" });
+      setUserModal(false);
+      notify("Senha redefinida. As sessões anteriores foram encerradas.");
+      if (editingUser.id === currentUser.id) {
+        router.replace("/login");
+        router.refresh();
+      } else {
+        await reloadWorkspace();
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível redefinir a senha.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await apiRequest("/api/auth/logout", "POST", {});
+      router.replace("/login");
+      router.refresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível encerrar a sessão.");
     }
   };
 
@@ -230,7 +274,7 @@ export default function WorkspaceApp() {
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard },
     { label: "Projetos", icon: FolderKanban },
-    { label: "Usuários", icon: UsersIcon },
+    ...(isAdmin ? [{ label: "Usuários", icon: UsersIcon }] : []),
     { label: "Configurações", icon: Settings2 },
   ];
 
@@ -261,14 +305,14 @@ export default function WorkspaceApp() {
     <main className="main-area">
       <header className="topbar">
         <div className="topbar-left"><button className="icon-button mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={14} /><strong>{page}</strong></div></div>
-        <div className="topbar-actions"><div className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={page === "Projetos" ? "Buscar projetos pelo nome..." : "Buscar tarefas, projetos..."} aria-label="Buscar" /><kbd>⌘ K</kbd></div><button className="icon-button notification-button" aria-label="Notificações" onClick={() => notify("Você está em dia com as notificações.")}><Bell size={18} /><i /></button><div className={`top-avatar avatar-${currentUser?.color ?? "purple"}`}>{currentUser?.initials ?? "AA"}</div></div>
+        <div className="topbar-actions"><div className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={page === "Projetos" ? "Buscar projetos pelo nome..." : "Buscar tarefas, projetos..."} aria-label="Buscar" /><kbd>⌘ K</kbd></div><button className="icon-button notification-button" aria-label="Notificações" onClick={() => notify("Você está em dia com as notificações.")}><Bell size={18} /><i /></button><div className={`top-avatar avatar-${currentUser?.color ?? "purple"}`}>{currentUser?.initials ?? "AA"}</div><button className="icon-button logout-button" aria-label="Sair" title="Sair" onClick={() => void signOut()}><LogOut size={17} /></button></div>
       </header>
 
       <div className="content-area">
         {page === "Dashboard" && <Dashboard tasks={tasks} projectCount={projects.length} taskCount={taskCount} pendingCount={pendingCount} doneCount={doneCount} onNewTask={() => setShowNewTask(true)} onNewProject={() => setProjectModal(true)} onPage={setPage} onTask={setTaskDetails} />}
         {page === "Projetos" && <ProjectsView projects={projects} selected={selectedProject} search={search} onSelect={setSelectedProject} onNew={() => setProjectModal(true)} onOpenProject={(name) => { setSelectedProject(name); setPage("Quadro Kanban"); }} />}
         {page === "Quadro Kanban" && <KanbanView tasks={visibleTasks.filter((task) => selectedProject === "Todos os projetos" || task.project === selectedProject)} onMove={moveTask} onTask={setTaskDetails} onNew={() => setShowNewTask(true)} project={selectedProject} />}
-        {page === "Usuários" && <UsersView users={users} onNew={() => openUserModal()} onEdit={openUserModal} />}
+        {page === "Usuários" && isAdmin && <UsersView users={users} onNew={() => openUserModal()} onEdit={openUserModal} />}
         {page === "Configurações" && <SettingsView user={currentUser} saved={settingsSaved} theme={theme} onTheme={setTheme} onSaveProfile={saveProfile} onSavePreferences={() => { setSettingsSaved(true); notify("Preferências salvas."); }} />}
         {loading && <div className="page-footnote">Carregando dados do PostgreSQL…</div>}
       </div>
@@ -295,10 +339,12 @@ export default function WorkspaceApp() {
 
     {userModal && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setUserModal(false); }}><div className="modal"><div className="modal-head"><div><h2>{editingUser ? "Editar usuário" : "Adicionar usuário"}</h2><p>{editingUser ? "Atualize os dados deste membro." : "Adicione alguém para colaborar."}</p></div><button className="icon-button" aria-label="Fechar" onClick={() => setUserModal(false)}><X size={18} /></button></div>
       <div className="form-field"><label htmlFor="user-name">Nome completo <em>*</em></label><input id="user-name" autoFocus value={userForm.name} onChange={(event) => setUserForm({ ...userForm, name: event.target.value })} placeholder="Nome e sobrenome" /></div>
-      <div className="form-field"><label htmlFor="user-email">E-mail</label><input id="user-email" type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} placeholder="nome@empresa.com" /></div>
+      <div className="form-field"><label htmlFor="user-email">E-mail <em>*</em></label><input id="user-email" type="email" required value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} placeholder="nome@empresa.com" /></div>
       <div className="form-field"><label htmlFor="user-job">Cargo</label><input id="user-job" value={userForm.jobTitle} onChange={(event) => setUserForm({ ...userForm, jobTitle: event.target.value })} placeholder="Ex.: Analista de projetos" /></div>
       <div className="form-field"><label htmlFor="user-phone">Telefone</label><input id="user-phone" type="tel" value={userForm.phone} onChange={(event) => setUserForm({ ...userForm, phone: event.target.value })} placeholder="(00) 00000-0000" /></div>
+      {!editingUser && <div className="user-password-fields"><h3>Acesso ao workspace</h3><p>Defina a senha que a pessoa usará para entrar. Use ao menos 12 caracteres.</p><div className="form-field"><label htmlFor="new-user-password">Senha <em>*</em></label><input id="new-user-password" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.password} onChange={(event) => setPasswordForm({ ...passwordForm, password: event.target.value })} /></div><div className="form-field"><label htmlFor="new-user-password-confirm">Confirmação da senha <em>*</em></label><input id="new-user-password-confirm" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.confirmation} onChange={(event) => setPasswordForm({ ...passwordForm, confirmation: event.target.value })} /></div></div>}
       <div className="modal-actions"><button className="button secondary" onClick={() => setUserModal(false)}>Cancelar</button><button className="button primary" onClick={() => void saveUser()}>{editingUser ? "Salvar alterações" : "Adicionar usuário"}</button></div>
+      {editingUser && <section className="password-reset-section"><h3>Redefinir senha</h3><p>A pessoa precisará entrar novamente com a nova senha.</p><div className="form-field"><label htmlFor="reset-user-password">Senha <em>*</em></label><input id="reset-user-password" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.password} onChange={(event) => setPasswordForm({ ...passwordForm, password: event.target.value })} /></div><div className="form-field"><label htmlFor="reset-user-password-confirm">Confirmação da senha <em>*</em></label><input id="reset-user-password-confirm" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.confirmation} onChange={(event) => setPasswordForm({ ...passwordForm, confirmation: event.target.value })} /></div><div className="modal-actions"><button className="button secondary" disabled={passwordBusy} onClick={() => setPasswordForm({ password: "", confirmation: "" })}>Limpar</button><button className="button primary" disabled={passwordBusy} onClick={() => void saveUserPassword()}>{passwordBusy ? "Salvando..." : "Redefinir senha"}</button></div></section>}
     </div></div>}
 
     {taskDetails && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setTaskDetails(null); }}><div className="modal task-detail-modal"><div className="modal-head"><div><div className="eyebrow">TAREFA</div><h2>{taskDetails.title}</h2><p>{taskDetails.project}</p></div><button className="icon-button" aria-label="Fechar" onClick={() => setTaskDetails(null)}><X size={18} /></button></div>
@@ -368,12 +414,29 @@ function UsersView({ users, onNew, onEdit }: { users: User[]; onNew: () => void;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Todos");
   const filtered = users.filter((user) => (user.name + " " + (user.email ?? "") + " " + user.jobTitle + " " + user.accessRole).toLowerCase().includes(search.toLowerCase()) && (filter === "Todos" || user.status === filter));
-  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">EQUIPE E ACESSOS</div><h1>Usuários</h1><p>Gerencie os membros, seus papéis e o acesso ao workspace.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Adicionar usuário</button></div><div className="toolbar"><div className="search-box user-search"><Search size={15} /><input aria-label="Buscar usuários" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou e-mail" /></div><div className="toolbar-right"><select className="select-button" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select><button className="button secondary" onClick={() => { setFilter("Todos"); setSearch(""); }}><SlidersHorizontal size={15} /> Limpar filtros</button></div></div><div className="panel table-panel"><table><thead><tr><th>Usuário</th><th>Perfil de acesso</th><th>Situação</th><th>Última atividade</th><th /></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><div className="user-cell"><div className={`avatar avatar-${user.color}`}>{user.initials}</div><div><strong>{user.name}</strong><small>{user.email || "Sem e-mail"}</small><small>{[user.jobTitle, user.phone].filter(Boolean).join(" · ")}</small></div></div></td><td><span className="role-pill">{user.accessRole}</span></td><td><span className={`status-pill ${user.status === "Ativo" ? "active" : "inactive"}`}><i />{user.status}</span></td><td className="muted">—</td><td><button className="icon-button" onClick={() => onEdit(user)} title="Editar dados do usuário" aria-label={`Editar ${user.name}`}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><UsersIcon size={26} /><strong>Nenhum usuário encontrado</strong></div>}</div><div className="page-footnote"><span>{filtered.length} de {users.length} usuários</span><span>Cadastro do workspace</span></div></div>;
+  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">EQUIPE E ACESSOS</div><h1>Usuários</h1><p>Gerencie os membros, seus papéis e o acesso ao workspace.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Adicionar usuário</button></div><div className="toolbar"><div className="search-box user-search"><Search size={15} /><input aria-label="Buscar usuários" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou e-mail" /></div><div className="toolbar-right"><select className="select-button" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select><button className="button secondary" onClick={() => { setFilter("Todos"); setSearch(""); }}><SlidersHorizontal size={15} /> Limpar filtros</button></div></div><div className="panel table-panel"><table><thead><tr><th>Usuário</th><th>Perfil de acesso</th><th>Situação</th><th>Acesso</th><th>Última atividade</th><th /></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><div className="user-cell"><div className={`avatar avatar-${user.color}`}>{user.initials}</div><div><strong>{user.name}</strong><small>{user.email || "Sem e-mail"}</small><small>{[user.jobTitle, user.phone].filter(Boolean).join(" · ")}</small></div></div></td><td><span className="role-pill">{user.accessRole}</span></td><td><span className={`status-pill ${user.status === "Ativo" ? "active" : "inactive"}`}><i />{user.status}</span></td><td><span className={`status-pill ${user.hasAccess ? "active" : "inactive"}`}><i />{user.hasAccess ? "Habilitado" : "Senha pendente"}</span></td><td className="muted">—</td><td><button className="icon-button" onClick={() => onEdit(user)} title="Editar dados e senha do usuário" aria-label={`Editar ${user.name}`}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><UsersIcon size={26} /><strong>Nenhum usuário encontrado</strong></div>}</div><div className="page-footnote"><span>{filtered.length} de {users.length} usuários</span><span>Cadastro do workspace</span></div></div>;
 }
 
 function SettingsView({ user, saved, theme, onTheme, onSaveProfile, onSavePreferences }: { user: User | null; saved: boolean; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; onSaveProfile: (profile: Pick<User, "name" | "email" | "jobTitle" | "phone">) => Promise<void>; onSavePreferences: () => void }) {
   const [section, setSection] = useState("Perfil");
   const [profile, setProfile] = useState({ name: "", email: "", jobTitle: "", phone: "" });
   useEffect(() => { setProfile({ name: user?.name ?? "", email: user?.email ?? "", jobTitle: user?.jobTitle ?? "", phone: user?.phone ?? "" }); }, [user]);
-  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">PREFERÊNCIAS DO WORKSPACE</div><h1>Configurações</h1><p>Personalize sua experiência e gerencie os dados da sua conta.</p></div></div><div className="settings-layout"><aside className="settings-nav panel">{["Perfil", "Preferências", "Segurança"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Perfil" ? <UsersIcon size={17} /> : item === "Preferências" ? <Settings2 size={17} /> : <Zap size={17} />} {item}</button>)}</aside><section className="panel settings-panel"><div className="settings-title"><h2>{section === "Perfil" ? "Informações do perfil" : section === "Preferências" ? "Preferências da interface" : "Segurança da conta"}</h2><p>{section === "Perfil" ? "Atualize suas informações pessoais e como elas aparecem para a equipe." : section === "Preferências" ? "Configure a aparência e as opções de uso do workspace." : "Os recursos de autenticação serão ativados em uma próxima etapa."}</p></div>{section === "Perfil" ? <><div className="profile-edit"><div className={`avatar avatar-${user?.color ?? "purple"} avatar-large`}>{user?.initials ?? "AA"}</div><div><strong>Foto do perfil</strong><p>JPG ou PNG. Recomendado: 256 × 256 px.</p><button className="button secondary small" onClick={() => undefined}>Alterar foto</button></div></div><div className="settings-form-grid"><div className="form-field"><label>Nome completo</label><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></div><div className="form-field"><label>E-mail</label><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" /></div><div className="form-field"><label>Cargo</label><input value={profile.jobTitle} onChange={(event) => setProfile({ ...profile, jobTitle: event.target.value })} /></div><div className="form-field"><label>Telefone</label><input value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} type="tel" placeholder="(00) 00000-0000" /></div></div></> : section === "Preferências" ? <><div className="preference-row"><div><strong>Tema da interface</strong><p>Escolha a aparência do workspace.</p></div><select value={theme} onChange={(event) => onTheme(event.target.value as ThemePreference)}><option>Claro</option><option>Escuro</option><option>Sistema</option></select></div><div className="preference-row"><div><strong>Formato de data</strong><p>Como as datas serão exibidas.</p></div><select defaultValue="DD/MM/AAAA"><option>DD/MM/AAAA</option><option>AAAA-MM-DD</option></select></div><div className="preference-row"><div><strong>Notificações por e-mail</strong><p>Receba atualizações sobre suas tarefas.</p></div><input type="checkbox" defaultChecked className="check-input" /></div></> : <div className="security-placeholder"><div className="security-icon"><Zap size={22} /></div><h3>Autenticação em preparação</h3><p>Esta prévia abre diretamente no Dashboard. A autenticação deverá ser habilitada antes do uso em produção; nenhum segredo administrativo é enviado ao navegador.</p><span className="status-pill inactive"><i />Login não habilitado</span></div>}<div className="settings-actions"><span>{saved ? "Alterações salvas." : "As alterações ainda não foram salvas."}</span><button className="button primary" onClick={() => { if (section === "Perfil") void onSaveProfile(profile); else onSavePreferences(); }}><Check size={16} /> Salvar alterações</button></div></section></div></div>;
+  return <div className="page-stack">
+    <div className="page-heading"><div><div className="eyebrow">PREFERÊNCIAS DO WORKSPACE</div><h1>Configurações</h1><p>Personalize sua experiência e gerencie os dados da sua conta.</p></div></div>
+    <div className="settings-layout">
+      <aside className="settings-nav panel">{["Perfil", "Preferências", "Segurança"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Perfil" ? <UsersIcon size={17} /> : item === "Preferências" ? <Settings2 size={17} /> : <Zap size={17} />} {item}</button>)}</aside>
+      <section className="panel settings-panel">
+        <div className="settings-title"><h2>{section === "Perfil" ? "Informações do perfil" : section === "Preferências" ? "Preferências da interface" : "Segurança da conta"}</h2><p>{section === "Perfil" ? "Atualize suas informações pessoais e como elas aparecem para a equipe." : section === "Preferências" ? "Configure a aparência e as opções de uso do workspace." : "Consulte como solicitar a redefinição de senha da sua conta."}</p></div>
+        {section === "Perfil" ? <>
+          <div className="profile-edit"><div className={`avatar avatar-${user?.color ?? "purple"} avatar-large`}>{user?.initials ?? "AA"}</div><div><strong>Foto do perfil</strong><p>JPG ou PNG. Recomendado: 256 × 256 px.</p><button className="button secondary small" onClick={() => undefined}>Alterar foto</button></div></div>
+          <div className="settings-form-grid"><div className="form-field"><label>Nome completo</label><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></div><div className="form-field"><label>E-mail</label><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" required={Boolean(user?.hasAccess)} /></div><div className="form-field"><label>Cargo</label><input value={profile.jobTitle} onChange={(event) => setProfile({ ...profile, jobTitle: event.target.value })} /></div><div className="form-field"><label>Telefone</label><input value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} type="tel" placeholder="(00) 00000-0000" /></div></div>
+        </> : section === "Preferências" ? <>
+          <div className="preference-row"><div><strong>Tema da interface</strong><p>Escolha a aparência do workspace.</p></div><select value={theme} onChange={(event) => onTheme(event.target.value as ThemePreference)}><option>Claro</option><option>Escuro</option><option>Sistema</option></select></div>
+          <div className="preference-row"><div><strong>Formato de data</strong><p>Como as datas serão exibidas.</p></div><select defaultValue="DD/MM/AAAA"><option>DD/MM/AAAA</option><option>AAAA-MM-DD</option></select></div>
+          <div className="preference-row"><div><strong>Notificações por e-mail</strong><p>Receba atualizações sobre suas tarefas.</p></div><input type="checkbox" defaultChecked className="check-input" /></div>
+        </> : <div className="security-placeholder"><div className="security-icon"><Zap size={22} /></div><h3>Senha administrada pelo site</h3><p>Um administrador pode redefinir sua senha na aba Usuários. A tela de login não oferece recuperação automática.</p><span className="status-pill active"><i />Autenticação ativa</span></div>}
+        {section !== "Segurança" && <div className="settings-actions"><span>{saved ? "Alterações salvas." : "As alterações ainda não foram salvas."}</span><button className="button primary" onClick={() => { if (section === "Perfil") void onSaveProfile(profile); else onSavePreferences(); }}><Check size={16} /> Salvar alterações</button></div>}
+      </section>
+    </div>
+  </div>;
 }

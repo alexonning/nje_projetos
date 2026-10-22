@@ -13,6 +13,7 @@ export type User = {
   status: "Ativo" | "Inativo";
   initials: string;
   color: string;
+  hasAccess?: boolean;
 };
 
 export type ChecklistItem = {

@@ -1,4 +1,4 @@
-import { apiError, developmentOnlyResponse } from "@/lib/api-access";
+import { apiError, requireApiUser } from "@/lib/api-access";
 import { pool } from "@/lib/db";
 import { taskUpdateSchema } from "@/lib/validation";
 
@@ -14,8 +14,8 @@ const columns: Record<string, string> = {
 };
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const blocked = developmentOnlyResponse();
-  if (blocked) return blocked;
+  const authorization = await requireApiUser(request);
+  if ("response" in authorization) return authorization.response;
 
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return Response.json({ error: "Identificador de tarefa inválido." }, { status: 400 });

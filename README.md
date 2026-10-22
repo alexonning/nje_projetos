@@ -15,9 +15,7 @@ npm install
 npm run dev
 ```
 
-Acesse http://localhost:3000.
-
-A interface inicial abre no Dashboard. Em desenvolvimento, projetos, tarefas e usuários persistem no PostgreSQL selecionado. **A aplicação ainda não inclui autenticação e não está pronta para produção.**
+Acesse http://localhost:3000. O painel exige e-mail e senha; o administrador inicial é criado no passo abaixo.
 
 ## Docker
 
@@ -34,14 +32,17 @@ Copie `.env.example` para `.env.local`. Para iniciar o PostgreSQL local com os d
 npm run db:check
 npm run db:migrate
 npm run db:seed
+npm run auth:bootstrap
 npm run dev
 ```
+
+Antes de executar `auth:bootstrap`, preencha em `.env.local` as variáveis `AUTH_BOOTSTRAP_ADMIN_NAME`, `AUTH_BOOTSTRAP_ADMIN_EMAIL` e `AUTH_BOOTSTRAP_ADMIN_PASSWORD`. A senha precisa ter entre 12 e 128 caracteres. O comando cria ou associa o perfil de administrador ao e-mail informado e grava somente o hash da senha. Remova as três variáveis depois do bootstrap. O comando é inicial; ele recusa substituir uma conta de administrador que já tenha credenciais.
 
 Por padrão, a conexão é `postgresql://postgres:postgres@localhost:5432/postgres`. As tabelas do Nexo ficam isoladas no schema `nexo`. Para usar outro servidor local, altere `LOCAL_DATABASE_URL`.
 
 Para usar o Supabase, copie a connection string em **Database → Connect**, preencha `SUPABASE_DATABASE_URL` e altere `DATABASE_PROVIDER` para `supabase`. Aplique `npm run db:migrate` no banco escolhido; execute `npm run db:seed` somente se quiser carregar dados demonstrativos. Um banco fica ativo por vez e não há sincronização automática. A URL fica somente no servidor.
 
-As rotas sem autenticação ficam bloqueadas fora do modo de desenvolvimento. Configure autenticação e autorização antes de publicar a aplicação com acesso a dados reais.
+Para produção, configure as variáveis de banco no ambiente do servidor, aplique `node scripts/db-migrate.mjs` e execute `node scripts/auth-bootstrap.mjs` uma única vez com as três variáveis de bootstrap configuradas no ambiente. Remova os segredos de bootstrap após a execução. Nunca exponha essas variáveis ao navegador.
 
 ## Estado atual
 
@@ -54,11 +55,16 @@ Implementado nesta etapa:
 - Painel de detalhes da tarefa, configurações de perfil e preferências.
 - Busca, filtros, feedback toast e estados vazios.
 
+Autenticação:
+- Login por e-mail e senha, sessão persistida no PostgreSQL e logout.
+- Criação de contas e redefinição de senhas disponíveis para administradores na aba Usuários.
+- Não há cadastro público nem recuperação automática de senha.
+- O bootstrap inicial exige configuração explícita de nome, e-mail e senha; não existe senha padrão embutida.
+
 Ainda pendente:
-- Autenticação e autorização real.
 - Sincronização de dados entre provedores.
 - Upload privado no Supabase Storage.
 - Drag-and-drop real com dnd-kit (o pacote está incluído; esta primeira etapa usa controles acessíveis para mudança de status).
 - Logs de auditoria persistidos, testes automatizados e validação de build no ambiente de entrega.
 
-Não utilize dados exibidos na prévia como dados reais de produção.
+Registros antigos sem credenciais permanecem sem acesso até que o administrador cadastre um e-mail e atribua uma senha pela aba Usuários.

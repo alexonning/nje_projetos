@@ -1,4 +1,4 @@
-import { apiError, developmentOnlyResponse } from "@/lib/api-access";
+import { apiError, requireApiUser } from "@/lib/api-access";
 import { pool } from "@/lib/db";
 import { taskCreateSchema } from "@/lib/validation";
 
@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
-  const blocked = developmentOnlyResponse();
-  if (blocked) return blocked;
+  const authorization = await requireApiUser(request);
+  if ("response" in authorization) return authorization.response;
 
   const parsed = taskCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Confira os dados da tarefa e selecione um projeto válido." }, { status: 400 });

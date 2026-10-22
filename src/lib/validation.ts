@@ -35,11 +35,38 @@ export const taskUpdateSchema = z.object({
   checklist: z.array(z.object({ id: z.string().uuid().optional(), title: z.string().trim().min(1).max(300), completed: z.boolean() })).max(100).optional(),
 });
 
-export const userCreateSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  email: z.union([z.string().trim().email().max(254), z.null()]).optional(),
-  jobTitle: z.string().trim().max(120).default(""),
-  phone: z.string().trim().max(40).default(""),
+const passwordSchema = z.string().min(12).max(128);
+const passwordConfirmationSchema = z.string().min(1).max(128);
+const loginEmailSchema = z.string().trim().email().max(254).transform((email) => email.toLowerCase());
+
+export const loginSchema = z.object({
+  email: loginEmailSchema,
+  password: z.string().min(1).max(128),
 });
 
-export const userUpdateSchema = userCreateSchema.partial();
+export const userCreateSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  email: loginEmailSchema,
+  jobTitle: z.string().trim().max(120).default(""),
+  phone: z.string().trim().max(40).default(""),
+  password: passwordSchema,
+  passwordConfirmation: passwordConfirmationSchema,
+}).refine((data) => data.password === data.passwordConfirmation, {
+  path: ["passwordConfirmation"],
+  message: "As senhas não coincidem.",
+});
+
+export const userUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  email: z.union([loginEmailSchema, z.null()]).optional(),
+  jobTitle: z.string().trim().max(120).optional(),
+  phone: z.string().trim().max(40).optional(),
+});
+
+export const passwordResetSchema = z.object({
+  password: passwordSchema,
+  passwordConfirmation: passwordConfirmationSchema,
+}).refine((data) => data.password === data.passwordConfirmation, {
+  path: ["passwordConfirmation"],
+  message: "As senhas não coincidem.",
+});

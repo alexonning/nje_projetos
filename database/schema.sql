@@ -14,6 +14,36 @@ CREATE TABLE IF NOT EXISTS nexo.workspace_users (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_users_email_lower_idx
+  ON nexo.workspace_users (lower(email))
+  WHERE email IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS nexo.workspace_credentials (
+  user_id uuid PRIMARY KEY REFERENCES nexo.workspace_users(id) ON DELETE CASCADE,
+  password_hash text NOT NULL,
+  password_changed_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS nexo.workspace_sessions (
+  token_hash char(64) PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES nexo.workspace_users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS workspace_sessions_user_expires_idx
+  ON nexo.workspace_sessions(user_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS nexo.workspace_auth_attempts (
+  email_hash char(64) PRIMARY KEY,
+  failed_attempts integer NOT NULL DEFAULT 0,
+  window_started_at timestamptz NOT NULL DEFAULT now(),
+  locked_until timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS nexo.projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL UNIQUE,

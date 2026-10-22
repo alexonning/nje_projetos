@@ -1,17 +1,17 @@
-import { apiError, developmentOnlyResponse } from "@/lib/api-access";
+import { apiError, requireApiUser } from "@/lib/api-access";
 import { pool, databaseConfig } from "@/lib/db";
 import type { ChecklistItem, Project, Task, User, WorkspaceData } from "@/lib/workspace-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<Response> {
-  const blocked = developmentOnlyResponse();
-  if (blocked) return blocked;
+export async function GET(request: Request): Promise<Response> {
+  const authorization = await requireApiUser(request);
+  if ("response" in authorization) return authorization.response;
 
   try {
     const [usersResult, projectsResult, tasksResult, assigneesResult, tagsResult, checklistResult] = await Promise.all([
-      pool.query("SELECT id, name, email, job_title, phone, access_role, status, initials, color FROM nexo.workspace_users ORDER BY created_at, name"),
+      pool.query("SELECT u.id, u.name, u.email, u.job_title, u.phone, u.access_role, u.status, u.initials, u.color, (c.user_id IS NOT NULL) AS has_access FROM nexo.workspace_users u LEFT JOIN nexo.workspace_credentials c ON c.user_id = u.id ORDER BY u.created_at, u.name"),
       pool.query("SELECT id, name, description, status, progress, to_char(due_date, 'YYYY-MM-DD') AS due_date, color FROM nexo.projects ORDER BY created_at, name"),
       pool.query("SELECT id, project_id, title, description, status, priority, to_char(due_date, 'YYYY-MM-DD') AS due_date FROM nexo.tasks ORDER BY created_at DESC"),
       pool.query("SELECT ta.task_id, u.id, u.name, u.email, u.job_title, u.phone, u.access_role, u.status, u.initials, u.color FROM nexo.task_assignees ta JOIN nexo.workspace_users u ON u.id = ta.user_id ORDER BY u.name"),
@@ -29,6 +29,7 @@ export async function GET(): Promise<Response> {
       status: row.status,
       initials: row.initials,
       color: row.color,
+      hasAccess: row.has_access,
     }));
     const userById = new Map(users.map((user) => [user.id, user]));
     const assigneesByTask = new Map<string, User[]>();

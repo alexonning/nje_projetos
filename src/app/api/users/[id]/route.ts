@@ -1,4 +1,5 @@
-import { apiError, developmentOnlyResponse } from "@/lib/api-access";
+import { apiError, requireApiUser } from "@/lib/api-access";
+import { ADMIN_ROLE } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { userUpdateSchema } from "@/lib/validation";
 
@@ -6,16 +7,30 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const blocked = developmentOnlyResponse();
-  if (blocked) return blocked;
+  const authorization = await requireApiUser(request);
+  if ("response" in authorization) return authorization.response;
 
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return Response.json({ error: "Identificador de usuário inválido." }, { status: 400 });
+  if (authorization.user.id !== id && authorization.user.accessRole !== ADMIN_ROLE) {
+    return Response.json({ error: "Somente um administrador pode editar este usuário." }, { status: 403 });
+  }
   const parsed = userUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || Object.keys(parsed.data ?? {}).length === 0) return Response.json({ error: "Confira os dados do usuário." }, { status: 400 });
 
   const columnMap = { name: "name", email: "email", jobTitle: "job_title", phone: "phone" } as const;
   try {
+    const current = await pool.query(
+      `SELECT u.email, EXISTS (SELECT 1 FROM nexo.workspace_credentials c WHERE c.user_id = u.id) AS has_credentials
+       FROM nexo.workspace_users u WHERE u.id = $1`,
+      [id],
+    );
+    if (!current.rowCount) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+    const nextEmail = "email" in parsed.data ? parsed.data.email : current.rows[0].email;
+    if (current.rows[0].has_credentials && !nextEmail) {
+      return Response.json({ error: "Um usuário com acesso precisa manter um e-mail cadastrado." }, { status: 400 });
+    }
+
     const values: unknown[] = [];
     const assignments: string[] = [];
     for (const [key, column] of Object.entries(columnMap)) {
