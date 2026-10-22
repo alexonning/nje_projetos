@@ -118,7 +118,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const [newProjectId, setNewProjectId] = useState("");
   const [newPriority, setNewPriority] = useState<TaskPriority>("Média");
   const [newAssigneeIds, setNewAssigneeIds] = useState<string[]>([]);
-  const [newTags, setNewTags] = useState("");
+  const [newTags, setNewTags] = useState<string[]>([]);
   const [newChecklist, setNewChecklist] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [toast, setToast] = useState("");
@@ -196,14 +196,14 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
     const checklist = newChecklist.split(/\r?\n/).map((title) => title.trim()).filter(Boolean).map((title) => ({ title, completed: false }));
     const payload: TaskPayload = {
       title: newTitle.trim(), description: newDescription.trim(), projectId, status: "Pendente", priority: newPriority,
-      dueDate: newDueDate || null, assigneeIds: newAssigneeIds, tags: [...new Set(newTags.split(",").map((tag) => tag.trim()).filter(Boolean))], checklist,
+      dueDate: newDueDate || null, assigneeIds: newAssigneeIds, tags: newTags, checklist,
     };
     try {
       await apiRequest("/api/tasks", "POST", payload);
       await reloadWorkspace();
       setShowNewTask(false);
       setNewProjectId(""); setNewTaskProjectLocked(false);
-      setNewTitle(""); setNewDescription(""); setNewAssigneeIds([]); setNewTags(""); setNewChecklist(""); setNewDueDate("");
+      setNewTitle(""); setNewDescription(""); setNewAssigneeIds([]); setNewTags([]); setNewChecklist(""); setNewDueDate("");
       notify("Tarefa criada com sucesso.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível criar a tarefa.");
@@ -357,7 +357,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       <div className="form-field"><label htmlFor="task-project">Projeto</label><select id="task-project" value={newProjectId || projects[0]?.id || ""} disabled={newTaskProjectLocked} onChange={(event) => setNewProjectId(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>{newTaskProjectLocked && <small className="form-hint">Esta tarefa será vinculada ao projeto aberto.</small>}</div>
       <div className="form-field"><label htmlFor="task-description">Descrição</label><textarea id="task-description" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Descreva o que precisa ser feito." /></div>
       <div className="form-field"><label>Responsáveis</label><AssigneeOptions users={users} selected={newAssigneeIds} onChange={setNewAssigneeIds} /></div>
-      <div className="form-field"><label htmlFor="task-tags">Tags</label><input id="task-tags" value={newTags} onChange={(event) => setNewTags(event.target.value)} placeholder="Separe as tags por vírgula" /></div>
+      <div className="form-field"><label>Tags</label><TagEditor tags={newTags} onChange={setNewTags} /></div>
       <div className="form-field"><label htmlFor="task-checklist">Etapas do checklist</label><textarea id="task-checklist" value={newChecklist} onChange={(event) => setNewChecklist(event.target.value)} placeholder={"Uma etapa por linha"} /></div>
       <div className="form-field"><label htmlFor="task-due">Prazo</label><input id="task-due" type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></div>
       <div className="form-field"><label htmlFor="task-priority">Prioridade</label><select id="task-priority" value={newPriority} onChange={(event) => setNewPriority(event.target.value as TaskPriority)}><option>Baixa</option><option>Média</option><option>Alta</option><option>Urgente</option></select></div>
@@ -386,7 +386,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       <div className="detail-grid"><div><span className="detail-label">Status</span><select value={taskDetails.status} onChange={(event) => setTaskDetails({ ...taskDetails, status: event.target.value as TaskStatus })}><option>Pendente</option><option>Em progresso</option><option>Finalizado</option></select></div><div><span className="detail-label">Prioridade</span><select value={taskDetails.priority} onChange={(event) => setTaskDetails({ ...taskDetails, priority: event.target.value as TaskPriority })}><option>Baixa</option><option>Média</option><option>Alta</option><option>Urgente</option></select></div><div><span className="detail-label">Prazo</span><input type="date" value={taskDetails.dueDate ?? ""} onChange={(event) => setTaskDetails({ ...taskDetails, dueDate: event.target.value || null })} /></div><div><span className="detail-label">Etapas concluídas</span><strong>{taskDetails.checklist.filter((item) => item.completed).length}/{taskDetails.checklist.length}</strong></div></div>
       <div className="detail-section"><h3>Descrição</h3><textarea className="detail-description-input" value={taskDetails.description} onChange={(event) => setTaskDetails({ ...taskDetails, description: event.target.value })} placeholder="Adicione uma descrição para esta tarefa." /></div>
       <div className="detail-section"><h3>Responsáveis</h3><AssigneeOptions users={users} selected={taskDetails.assigneeIds} onChange={(assigneeIds) => setTaskDetails({ ...taskDetails, assigneeIds, assignees: users.filter((user) => assigneeIds.includes(user.id)), owner: users.filter((user) => assigneeIds.includes(user.id)).map((user) => user.name).join(", ") || "Sem responsável", initials: users.find((user) => assigneeIds.includes(user.id))?.initials ?? "--" })} /></div>
-      <div className="detail-section"><label className="detail-label" htmlFor="edit-task-tags">Tags (separadas por vírgula)</label><input id="edit-task-tags" value={taskDetails.tags.join(", ")} onChange={(event) => setTaskDetails({ ...taskDetails, tags: [...new Set(event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean))] })} /></div>
+      <div className="detail-section"><h3>Tags</h3><TagEditor tags={taskDetails.tags} onChange={(tags) => setTaskDetails({ ...taskDetails, tags })} /></div>
       <div className="detail-section"><h3>Checklist</h3>{taskDetails.checklist.map((item) => <label className="checklist-row checklist-interactive" key={item.id}><input type="checkbox" checked={item.completed} onChange={(event) => setTaskDetails({ ...taskDetails, checklist: taskDetails.checklist.map((entry) => entry.id === item.id ? { ...entry, completed: event.target.checked } : entry) })} /><span className={item.completed ? "checklist-complete" : ""}>{item.title}</span></label>)}{taskDetails.checklist.length === 0 && <p className="muted">Nenhuma etapa adicionada.</p>}<div className="checklist-add"><input value={checklistDraft} onChange={(event) => setChecklistDraft(event.target.value)} placeholder="Nova etapa do checklist" /><button className="button secondary small" onClick={() => { if (!checklistDraft.trim()) return; setTaskDetails({ ...taskDetails, checklist: [...taskDetails.checklist, { id: crypto.randomUUID(), title: checklistDraft.trim(), completed: false }] }); setChecklistDraft(""); }}>Adicionar</button></div></div>
       <div className="modal-actions"><button className="button secondary" onClick={() => setTaskDetails(null)}>Cancelar</button><button className="button primary" onClick={() => void saveTask(taskDetails)}><Check size={16} /> Salvar alterações</button></div>
     </div></div>}
@@ -398,7 +398,38 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
 function AssigneeOptions({ users, selected, onChange }: { users: User[]; selected: string[]; onChange: (ids: string[]) => void }) {
   const available = users.filter((user) => user.status === "Ativo");
   if (!available.length) return <span className="muted">Nenhum usuário ativo cadastrado.</span>;
-  return <div className="assignee-options">{available.map((user) => <label className="assignee-option" key={user.id}><input type="checkbox" checked={selected.includes(user.id)} onChange={(event) => onChange(event.target.checked ? [...selected, user.id] : selected.filter((id) => id !== user.id))} /><span className={`avatar avatar-${user.color}`}>{user.initials}</span><span>{user.name}</span></label>)}</div>;
+  return <div className="assignee-options" role="group" aria-label="Selecionar responsáveis">{available.map((user) => {
+    const isSelected = selected.includes(user.id);
+    return <label className={`assignee-option${isSelected ? " is-selected" : ""}`} key={user.id}><input type="checkbox" checked={isSelected} onChange={(event) => onChange(event.target.checked ? [...selected, user.id] : selected.filter((id) => id !== user.id))} /><span className={`avatar avatar-${user.color}`}>{user.initials}</span><span className="assignee-name">{user.name}</span>{isSelected && <span className="assignee-selected-indicator" aria-hidden="true"><Check size={13} /></span>}</label>;
+  })}</div>;
+}
+
+function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const normalizedDraft = draft.trim();
+  const duplicate = normalizedDraft.length > 0 && tags.some((tag) => tag.toLocaleLowerCase("pt-BR") === normalizedDraft.toLocaleLowerCase("pt-BR"));
+  const canAdd = normalizedDraft.length > 0 && normalizedDraft.length <= 40 && !duplicate && tags.length < 30;
+
+  const addTag = () => {
+    if (!canAdd) return;
+    onChange([...tags, normalizedDraft]);
+    setDraft("");
+  };
+
+  const hint = tags.length >= 30
+    ? "Limite de 30 tags atingido."
+    : duplicate
+      ? "Esta tag já foi adicionada."
+      : "Digite uma tag e pressione Enter ou selecione Adicionar.";
+
+  return <div className="tag-editor">
+    <div className="tag-editor-entry">
+      <input aria-label="Nova tag" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} maxLength={40} placeholder="Digite o nome da tag" />
+      <button className="button secondary small tag-editor-add" type="button" disabled={!canAdd} onClick={addTag}><Plus size={13} /> Adicionar</button>
+    </div>
+    {tags.length > 0 && <div className="tag-editor-list" aria-label="Tags adicionadas">{tags.map((tag) => <span className="tag-editor-chip" key={tag}><span>{tag}</span><button type="button" aria-label={`Remover tag ${tag}`} title={`Remover tag ${tag}`} onClick={() => onChange(tags.filter((item) => item !== tag))}><X size={12} /></button></span>)}</div>}
+    <small className="tag-editor-hint">{hint}</small>
+  </div>;
 }
 
 function Dashboard({ userName, tasks, taskTrends, recentActivity, projectCount, taskCount, pendingCount, doneCount, onNewTask, onNewProject, onPage, onTask }: { userName: string; tasks: Task[]; taskTrends: TaskTrend[]; recentActivity: TaskActivity[]; projectCount: number; taskCount: number; pendingCount: number; doneCount: number; onNewTask: () => void; onNewProject: () => void; onPage: (page: string) => void; onTask: (task: Task) => void }) {

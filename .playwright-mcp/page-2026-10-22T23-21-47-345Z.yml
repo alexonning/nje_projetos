@@ -1,0 +1,213 @@
+- generic [ref=f2e1]:
+  - alert [ref=f2e281]
+  - generic [ref=f2e325]:
+    - complementary [ref=f2e326]:
+      - generic [ref=f2e327]:
+        - generic [ref=f2e331]:
+          - strong [ref=f2e332]: nexo.
+          - generic [ref=f2e333]: WORKSPACE
+        - button "Recolher menu" [ref=f2e334] [cursor=pointer]
+      - generic [ref=f2e338]:
+        - generic [ref=f2e339]: A
+        - generic [ref=f2e340]:
+          - strong [ref=f2e341]: Alex
+          - generic [ref=f2e342]: Workspace pessoal
+      - generic [ref=f2e345]: MENU PRINCIPAL
+      - navigation [ref=f2e346]:
+        - button "Dashboard" [ref=f2e347] [cursor=pointer]
+        - button "Projetos 2" [ref=f2e354] [cursor=pointer]:
+          - generic [ref=f2e357]: Projetos
+          - generic [ref=f2e358]: "2"
+        - button "Usuários" [ref=f2e359] [cursor=pointer]
+        - button "Configurações" [ref=f2e366] [cursor=pointer]
+      - generic [ref=f2e371]:
+        - generic [ref=f2e372]:
+          - generic [ref=f2e373]: SEUS PROJETOS
+          - button "Adicionar projeto" [ref=f2e374] [cursor=pointer]
+        - button "Carros antigos 2027" [ref=f2e376] [cursor=pointer]
+        - button "Corrida do imposto 2027" [ref=f2e379] [cursor=pointer]
+        - button "Ver todos os projetos" [ref=f2e382] [cursor=pointer]
+      - generic [ref=f2e385]:
+        - button "Central de ajuda" [ref=f2e386] [cursor=pointer]
+        - generic [ref=f2e391]:
+          - generic [ref=f2e392]: A
+          - generic [ref=f2e393]:
+            - strong [ref=f2e394]: Alex
+            - generic [ref=f2e395]: Administrador
+          - button "Abrir configurações do perfil" [ref=f2e396] [cursor=pointer]
+    - main [ref=f2e401]:
+      - generic [ref=f2e402]:
+        - generic [ref=f2e404]:
+          - generic [ref=f2e405]: Workspace
+          - strong [ref=f2e408]: Dashboard
+        - generic [ref=f2e409]:
+          - generic [ref=f2e410]:
+            - textbox "Buscar" [ref=f2e414]:
+              - /placeholder: Buscar tarefas, projetos...
+            - generic [ref=f2e415]: ⌘ K
+          - button "Notificações" [ref=f2e416] [cursor=pointer]
+          - generic [ref=f2e421]: A
+          - button "Sair" [ref=f2e422] [cursor=pointer]
+      - generic [ref=f2e427]:
+        - generic [ref=f2e428]:
+          - generic [ref=f2e429]:
+            - generic [ref=f2e430]: VISÃO GERAL DO WORKSPACE
+            - heading "Bom dia, Alex ✦" [level=1] [ref=f2e431]
+            - paragraph [ref=f2e432]: Aqui está o resumo do que está acontecendo no seu workspace.
+          - generic [ref=f2e433]:
+            - button "Novo projeto" [ref=f2e434] [cursor=pointer]
+            - button "Nova tarefa" [ref=f2e436] [cursor=pointer]
+        - generic [ref=f2e438]:
+          - button "02 Total de projetos Projetos cadastrados" [ref=f2e439] [cursor=pointer]:
+            - generic [ref=f2e448]: "02"
+            - generic [ref=f2e449]: Total de projetos
+            - generic [ref=f2e450]: Projetos cadastrados
+          - button "00 Total de tarefas Tarefas cadastradas" [ref=f2e454] [cursor=pointer]:
+            - generic [ref=f2e464]: "00"
+            - generic [ref=f2e465]: Total de tarefas
+            - generic [ref=f2e466]: Tarefas cadastradas
+          - button "00 Tarefas pendentes Precisam de atenção" [ref=f2e470] [cursor=pointer]:
+            - generic [ref=f2e480]: "00"
+            - generic [ref=f2e481]: Tarefas pendentes
+            - generic [ref=f2e482]: Precisam de atenção
+          - button "00 Tarefas concluídas 0% das tarefas" [ref=f2e486] [cursor=pointer]:
+            - generic [ref=f2e496]: "00"
+            - generic [ref=f2e497]: Tarefas concluídas
+            - generic [ref=f2e498]: 0% das tarefas
+        - generic [ref=f2e502]:
+          - generic [ref=f2e503]:
+            - generic [ref=f2e504]:
+              - generic [ref=f2e505]:
+                - heading "Visão geral das tarefas" [level=2] [ref=f2e506]
+                - paragraph [ref=f2e507]: Criações e conclusões registradas por dia
+              - generic [ref=f2e508]: Últimos 7 dias
+            - generic [ref=f2e509]:
+              - generic [ref=f2e510]:
+                - generic [ref=f2e511]: "4"
+                - generic [ref=f2e512]: "3"
+                - generic [ref=f2e513]: "2"
+                - generic [ref=f2e514]: "1"
+                - generic [ref=f2e515]: "0"
+              - generic [ref=f2e523]:
+                - generic [ref=f2e524]:
+                  - generic [ref=f2e525]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e526]: sex
+                - generic [ref=f2e527]:
+                  - generic [ref=f2e528]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e529]: sáb
+                - generic [ref=f2e530]:
+                  - generic [ref=f2e531]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e532]: dom
+                - generic [ref=f2e533]:
+                  - generic [ref=f2e534]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e535]: seg
+                - generic [ref=f2e536]:
+                  - generic [ref=f2e537]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e538]: ter
+                - generic [ref=f2e539]:
+                  - generic [ref=f2e540]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e541]: qua
+                - generic [ref=f2e542]:
+                  - generic [ref=f2e543]:
+                    - generic "0 tarefa(s) criada(s)"
+                    - generic "0 tarefa(s) concluída(s)"
+                  - generic [ref=f2e544]: qui
+            - generic [ref=f2e545]:
+              - generic [ref=f2e546]: Tarefas criadas
+              - generic [ref=f2e548]: Tarefas concluídas
+              - generic [ref=f2e550]: Sem movimentação nos últimos 7 dias
+          - generic [ref=f2e551]:
+            - generic [ref=f2e552]:
+              - generic [ref=f2e553]:
+                - heading "Status das tarefas" [level=2] [ref=f2e554]
+                - paragraph [ref=f2e555]: Distribuição atual
+              - button "Abrir Kanban" [ref=f2e556] [cursor=pointer]
+            - generic [ref=f2e563]:
+              - strong [ref=f2e564]: "0"
+              - generic [ref=f2e565]: tarefas
+            - generic [ref=f2e566]:
+              - generic [ref=f2e567]:
+                - generic [ref=f2e568]: Pendente
+                - strong [ref=f2e570]: "0"
+              - generic [ref=f2e571]:
+                - generic [ref=f2e572]: Em progresso
+                - strong [ref=f2e574]: "0"
+              - generic [ref=f2e575]:
+                - generic [ref=f2e576]: Finalizado
+                - strong [ref=f2e578]: "0"
+        - generic [ref=f2e581]:
+          - generic [ref=f2e582]:
+            - heading "Tarefas recentes" [level=2] [ref=f2e583]
+            - paragraph [ref=f2e584]: Atividades que merecem sua atenção
+          - button "Ver todas" [ref=f2e585] [cursor=pointer]
+        - generic [ref=f2e588]:
+          - generic [ref=f2e592]:
+            - strong [ref=f2e593]: Um bom projeto começa com clareza.
+            - paragraph [ref=f2e594]: Organize as próximas entregas no Kanban e mantenha todos na mesma página.
+          - button "Abrir Kanban" [ref=f2e595] [cursor=pointer]
+    - generic [ref=f2e602]:
+      - generic [ref=f2e603]:
+        - generic [ref=f2e604]:
+          - heading "Nova tarefa" [level=2] [ref=f2e605]
+          - paragraph [ref=f2e606]: Adicione uma atividade ao seu projeto.
+        - button "Fechar" [ref=f2e607] [cursor=pointer]
+      - generic [ref=f2e611]:
+        - generic [ref=f2e612]:
+          - text: Título da tarefa
+          - emphasis [ref=f2e613]: "*"
+        - textbox "Título da tarefa *" [active] [ref=f2e614]:
+          - /placeholder: "Ex.: Implementar tela de relatórios"
+      - generic [ref=f2e615]:
+        - generic [ref=f2e616]: Projeto
+        - combobox "Projeto" [ref=f2e617]:
+          - option "Carros antigos 2027" [selected]
+          - option "Corrida do imposto 2027"
+      - generic [ref=f2e618]:
+        - generic [ref=f2e619]: Descrição
+        - textbox "Descrição" [ref=f2e620]:
+          - /placeholder: Descreva o que precisa ser feito.
+      - generic [ref=f2e621]:
+        - generic [ref=f2e622]: Responsáveis
+        - group "Selecionar responsáveis" [ref=f2e623]:
+          - generic [ref=f2e624] [cursor=pointer]:
+            - checkbox "A Alex" [ref=f2e625]
+            - generic [ref=f2e626]: A
+            - generic [ref=f2e627]: Alex
+      - generic [ref=f2e628]:
+        - generic [ref=f2e629]: Tags
+        - generic [ref=f2e630]:
+          - generic [ref=f2e631]:
+            - textbox "Nova tag" [ref=f2e632]:
+              - /placeholder: Digite o nome da tag
+            - button "Adicionar" [disabled] [ref=f2e633] [cursor=pointer]
+          - text: Digite uma tag e pressione Enter ou selecione Adicionar.
+      - generic [ref=f2e635]:
+        - generic [ref=f2e636]: Etapas do checklist
+        - textbox "Etapas do checklist" [ref=f2e637]:
+          - /placeholder: Uma etapa por linha
+      - generic [ref=f2e638]:
+        - generic [ref=f2e639]: Prazo
+        - textbox "Prazo" [ref=f2e640]
+      - generic [ref=f2e641]:
+        - generic [ref=f2e642]: Prioridade
+        - combobox "Prioridade" [ref=f2e643]:
+          - option "Baixa"
+          - option "Média" [selected]
+          - option "Alta"
+          - option "Urgente"
+      - generic [ref=f2e644]:
+        - button "Cancelar" [ref=f2e645] [cursor=pointer]
+        - button "Criar tarefa" [ref=f2e646] [cursor=pointer]
+    - generic [ref=f2e599]: PostgreSQL · local

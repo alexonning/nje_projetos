@@ -1,0 +1,24 @@
+- generic [active] [ref=f1e1]:
+  - main [ref=f1e2]:
+    - region [ref=f1e3]:
+      - generic [ref=f1e4]: nexo.
+      - generic [ref=f1e9]:
+        - text: WORKSPACE
+        - heading "Boas-vindas de volta" [level=1] [ref=f1e10]
+        - paragraph [ref=f1e11]: Entre com o e-mail e a senha fornecidos pelo administrador.
+      - generic [ref=f1e12]:
+        - generic [ref=f1e13]:
+          - generic [ref=f1e14]: E-mail
+          - textbox "E-mail" [ref=f1e19]:
+            - /placeholder: nome@empresa.com
+            - text: alex@gmail.com
+        - generic [ref=f1e20]:
+          - generic [ref=f1e21]: Senha
+          - textbox "Senha" [ref=f1e27]:
+            - /placeholder: Digite sua senha
+            - text: "123456789123"
+        - alert [ref=f1e32]: Origem da solicitação inválida.
+        - button "Entrar no workspace" [ref=f1e28] [cursor=pointer]
+      - paragraph [ref=f1e29]: O acesso é gerenciado pelo administrador do site.
+    - generic [ref=f1e30]: NEXO · GESTÃO DE PROJETOS
+  - alert [ref=f1e31]
