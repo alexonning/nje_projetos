@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const updates = parsed.data;
     await client.query("BEGIN");
-    const exists = await client.query("SELECT 1 FROM nexo.tasks WHERE id = $1", [id]);
+    const exists = await client.query("SELECT status FROM nexo.tasks WHERE id = $1 FOR UPDATE", [id]);
     if (!exists.rowCount) {
       await client.query("ROLLBACK");
       return Response.json({ error: "Tarefa não encontrada." }, { status: 404 });
@@ -72,6 +72,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           [item.id ?? null, id, item.title, position, item.completed],
         );
       }
+    }
+
+    const statusChanged = "status" in updates && updates.status !== exists.rows[0].status;
+    const hasOtherUpdates = Object.keys(updates).some((key) => key !== "status");
+    if (statusChanged || hasOtherUpdates) {
+      await client.query(
+        `INSERT INTO nexo.task_activity
+           (task_id, actor_id, actor_name, actor_initials, actor_color, event_type, task_title, project_name, from_status, to_status)
+         SELECT t.id, $2, $3, $4, $5, $6, t.title, p.name, $7, $8
+         FROM nexo.tasks t JOIN nexo.projects p ON p.id = t.project_id
+         WHERE t.id = $1`,
+        [
+          id,
+          authorization.user.id,
+          authorization.user.name,
+          authorization.user.initials,
+          authorization.user.color,
+          statusChanged ? "task_status_changed" : "task_updated",
+          statusChanged ? exists.rows[0].status : null,
+          statusChanged ? updates.status : null,
+        ],
+      );
     }
 
     await client.query("COMMIT");

@@ -61,6 +61,7 @@ export const userUpdateSchema = z.object({
   email: z.union([loginEmailSchema, z.null()]).optional(),
   jobTitle: z.string().trim().max(120).optional(),
   phone: z.string().trim().max(40).optional(),
+  status: z.enum(["Ativo", "Inativo"]).optional(),
 });
 
 export const passwordResetSchema = z.object({

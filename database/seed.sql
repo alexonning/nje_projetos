@@ -27,6 +27,32 @@ FROM (VALUES
 JOIN nexo.projects p ON p.name = seed.project_name
 ON CONFLICT (id) DO NOTHING;
 
+UPDATE nexo.workspace_users u SET is_demo = true
+WHERE (
+  (u.id = '00000000-0000-4000-8000-000000000001' AND u.email = 'alex@workspace.dev') OR
+  (u.id = '00000000-0000-4000-8000-000000000002' AND u.email = 'marina@workspace.dev') OR
+  (u.id = '00000000-0000-4000-8000-000000000003' AND u.email = 'rafael@workspace.dev') OR
+  (u.id = '00000000-0000-4000-8000-000000000004' AND u.email = 'camila@workspace.dev')
+) AND NOT EXISTS (
+  SELECT 1 FROM nexo.workspace_credentials c WHERE c.user_id = u.id
+);
+UPDATE nexo.projects SET is_demo = true
+WHERE id IN (
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  '10000000-0000-4000-8000-000000000004'
+);
+UPDATE nexo.tasks SET is_demo = true
+WHERE id IN (
+  '20000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000002',
+  '20000000-0000-4000-8000-000000000003',
+  '20000000-0000-4000-8000-000000000004',
+  '20000000-0000-4000-8000-000000000005',
+  '20000000-0000-4000-8000-000000000006'
+);
+
 INSERT INTO nexo.task_assignees (task_id, user_id)
 SELECT mapping.task_id, u.id
 FROM (VALUES

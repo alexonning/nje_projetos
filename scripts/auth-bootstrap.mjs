@@ -48,7 +48,7 @@ try {
     const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
     await client.query(
       `UPDATE nexo.workspace_users
-       SET name = $1, email = $2, access_role = 'Administrador', status = 'Ativo', initials = $3, updated_at = now()
+       SET name = $1, email = $2, access_role = 'Administrador', status = 'Ativo', initials = $3, is_demo = false, updated_at = now()
        WHERE id = $4`,
       [name, email, initials, userId],
     );

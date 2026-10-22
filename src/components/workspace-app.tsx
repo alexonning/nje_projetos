@@ -9,7 +9,7 @@ import {
   Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search,
   Settings2, SlidersHorizontal, Sparkles, Users as UsersIcon, X, Zap,
 } from "lucide-react";
-import type { Project, Task, TaskPriority, TaskStatus, ThemePreference, User, WorkspaceData } from "@/lib/workspace-types";
+import type { Project, Task, TaskActivity, TaskPriority, TaskStatus, TaskTrend, ThemePreference, User, WorkspaceData } from "@/lib/workspace-types";
 
 type TaskPayload = {
   title: string;
@@ -52,6 +52,26 @@ function projectDateLabel(value: string | null): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date).replace(" de ", " ");
 }
 
+function taskActivityTime(value: string): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).valueOf()) / 1000));
+  const relative = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+  if (seconds < 60) return relative.format(-seconds, "second");
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), "minute");
+  if (seconds < 86400) return relative.format(-Math.floor(seconds / 3600), "hour");
+  return relative.format(-Math.floor(seconds / 86400), "day");
+}
+
+function taskActivityLabel(activity: TaskActivity): string {
+  if (activity.eventType === "task_created") return `${activity.actorName} criou uma tarefa`;
+  if (activity.eventType === "task_status_changed" && activity.toStatus === "Finalizado") return `${activity.actorName} concluiu uma tarefa`;
+  if (activity.eventType === "task_status_changed") return `${activity.actorName} alterou o status`;
+  return `${activity.actorName} atualizou uma tarefa`;
+}
+
+function taskActivityDateLabel(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(new Date(`${value}T12:00:00`)).replace(".", "");
+}
+
 function useThemePreference() {
   const [theme, setTheme] = useState<ThemePreference>("Claro");
   const [ready, setReady] = useState(false);
@@ -87,9 +107,12 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [taskTrends, setTaskTrends] = useState<TaskTrend[]>([]);
+  const [recentActivity, setRecentActivity] = useState<TaskActivity[]>([]);
   const [provider, setProvider] = useState<WorkspaceData["provider"]>("local");
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
+  const [newTaskProjectLocked, setNewTaskProjectLocked] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newProjectId, setNewProjectId] = useState("");
@@ -108,7 +131,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const [newProjectDueDate, setNewProjectDueDate] = useState("");
   const [userModal, setUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState({ name: "", email: "", jobTitle: "", phone: "" });
+  const [userForm, setUserForm] = useState<{ name: string; email: string; jobTitle: string; phone: string; status: User["status"] }>({ name: "", email: "", jobTitle: "", phone: "", status: "Ativo" });
   const [passwordForm, setPasswordForm] = useState({ password: "", confirmation: "" });
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -126,6 +149,8 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       setUsers(data.users);
       setProjects(data.projects);
       setTasks(data.tasks);
+      setTaskTrends(data.taskTrends);
+      setRecentActivity(data.recentActivity);
       setProvider(data.provider);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível carregar os dados.");
@@ -146,6 +171,13 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const pendingCount = tasks.filter((task) => task.status === "Pendente").length;
   const doneCount = tasks.filter((task) => task.status === "Finalizado").length;
 
+  const openNewTask = (projectName?: string) => {
+    const project = projectName ? projects.find((item) => item.name === projectName) : undefined;
+    setNewProjectId(project?.id ?? "");
+    setNewTaskProjectLocked(Boolean(project));
+    setShowNewTask(true);
+  };
+
   const moveTask = async (task: Task, status: TaskStatus) => {
     try {
       await apiRequest(`/api/tasks/${task.id}`, "PATCH", { status });
@@ -157,6 +189,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   };
 
   const createTask = async () => {
+    if (newTaskProjectLocked && !newProjectId) { notify("O projeto desta tarefa não está disponível."); return; }
     const projectId = newProjectId || projects[0]?.id;
     if (!newTitle.trim()) { notify("Informe o título da tarefa."); return; }
     if (!projectId) { notify("Crie ou selecione um projeto primeiro."); return; }
@@ -169,6 +202,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       await apiRequest("/api/tasks", "POST", payload);
       await reloadWorkspace();
       setShowNewTask(false);
+      setNewProjectId(""); setNewTaskProjectLocked(false);
       setNewTitle(""); setNewDescription(""); setNewAssigneeIds([]); setNewTags(""); setNewChecklist(""); setNewDueDate("");
       notify("Tarefa criada com sucesso.");
     } catch (error) {
@@ -206,7 +240,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
 
   const openUserModal = (user?: User) => {
     setEditingUser(user ?? null);
-    setUserForm({ name: user?.name ?? "", email: user?.email ?? "", jobTitle: user?.jobTitle ?? "", phone: user?.phone ?? "" });
+    setUserForm({ name: user?.name ?? "", email: user?.email ?? "", jobTitle: user?.jobTitle ?? "", phone: user?.phone ?? "", status: user?.status ?? "Ativo" });
     setPasswordForm({ password: "", confirmation: "" });
     setUserModal(true);
   };
@@ -217,7 +251,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
     if (!editingUser && passwordForm.password.length < 12) { notify("A senha precisa ter ao menos 12 caracteres."); return; }
     if (!editingUser && passwordForm.password !== passwordForm.confirmation) { notify("As senhas não coincidem."); return; }
     const profile = { name: userForm.name.trim(), email: userForm.email.trim().toLowerCase(), jobTitle: userForm.jobTitle.trim(), phone: userForm.phone.trim() };
-    const body = editingUser ? profile : { ...profile, password: passwordForm.password, passwordConfirmation: passwordForm.confirmation };
+    const body = editingUser ? { ...profile, status: userForm.status } : { ...profile, password: passwordForm.password, passwordConfirmation: passwordForm.confirmation };
     try {
       await apiRequest(editingUser ? `/api/users/${editingUser.id}` : "/api/users", editingUser ? "PATCH" : "POST", body);
       await reloadWorkspace();
@@ -309,9 +343,9 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       </header>
 
       <div className="content-area">
-        {page === "Dashboard" && <Dashboard tasks={tasks} projectCount={projects.length} taskCount={taskCount} pendingCount={pendingCount} doneCount={doneCount} onNewTask={() => setShowNewTask(true)} onNewProject={() => setProjectModal(true)} onPage={setPage} onTask={setTaskDetails} />}
+        {page === "Dashboard" && <Dashboard userName={currentUser.name} tasks={tasks} taskTrends={taskTrends} recentActivity={recentActivity} projectCount={projects.length} taskCount={taskCount} pendingCount={pendingCount} doneCount={doneCount} onNewTask={() => openNewTask()} onNewProject={() => setProjectModal(true)} onPage={setPage} onTask={setTaskDetails} />}
         {page === "Projetos" && <ProjectsView projects={projects} selected={selectedProject} search={search} onSelect={setSelectedProject} onNew={() => setProjectModal(true)} onOpenProject={(name) => { setSelectedProject(name); setPage("Quadro Kanban"); }} />}
-        {page === "Quadro Kanban" && <KanbanView tasks={visibleTasks.filter((task) => selectedProject === "Todos os projetos" || task.project === selectedProject)} onMove={moveTask} onTask={setTaskDetails} onNew={() => setShowNewTask(true)} project={selectedProject} />}
+        {page === "Quadro Kanban" && <KanbanView tasks={visibleTasks.filter((task) => selectedProject === "Todos os projetos" || task.project === selectedProject)} onMove={moveTask} onTask={setTaskDetails} onNew={() => openNewTask(selectedProject === "Todos os projetos" ? undefined : selectedProject)} project={selectedProject} />}
         {page === "Usuários" && isAdmin && <UsersView users={users} onNew={() => openUserModal()} onEdit={openUserModal} />}
         {page === "Configurações" && <SettingsView user={currentUser} saved={settingsSaved} theme={theme} onTheme={setTheme} onSaveProfile={saveProfile} onSavePreferences={() => { setSettingsSaved(true); notify("Preferências salvas."); }} />}
         {loading && <div className="page-footnote">Carregando dados do PostgreSQL…</div>}
@@ -320,7 +354,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
 
     {showNewTask && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewTask(false); }}><div className="modal"><div className="modal-head"><div><h2>Nova tarefa</h2><p>Adicione uma atividade ao seu projeto.</p></div><button className="icon-button" aria-label="Fechar" onClick={() => setShowNewTask(false)}><X size={18} /></button></div>
       <div className="form-field"><label htmlFor="task-title">Título da tarefa <em>*</em></label><input id="task-title" autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Ex.: Implementar tela de relatórios" /></div>
-      <div className="form-field"><label htmlFor="task-project">Projeto</label><select id="task-project" value={newProjectId || projects[0]?.id || ""} onChange={(event) => setNewProjectId(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
+      <div className="form-field"><label htmlFor="task-project">Projeto</label><select id="task-project" value={newProjectId || projects[0]?.id || ""} disabled={newTaskProjectLocked} onChange={(event) => setNewProjectId(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>{newTaskProjectLocked && <small className="form-hint">Esta tarefa será vinculada ao projeto aberto.</small>}</div>
       <div className="form-field"><label htmlFor="task-description">Descrição</label><textarea id="task-description" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Descreva o que precisa ser feito." /></div>
       <div className="form-field"><label>Responsáveis</label><AssigneeOptions users={users} selected={newAssigneeIds} onChange={setNewAssigneeIds} /></div>
       <div className="form-field"><label htmlFor="task-tags">Tags</label><input id="task-tags" value={newTags} onChange={(event) => setNewTags(event.target.value)} placeholder="Separe as tags por vírgula" /></div>
@@ -342,6 +376,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       <div className="form-field"><label htmlFor="user-email">E-mail <em>*</em></label><input id="user-email" type="email" required value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} placeholder="nome@empresa.com" /></div>
       <div className="form-field"><label htmlFor="user-job">Cargo</label><input id="user-job" value={userForm.jobTitle} onChange={(event) => setUserForm({ ...userForm, jobTitle: event.target.value })} placeholder="Ex.: Analista de projetos" /></div>
       <div className="form-field"><label htmlFor="user-phone">Telefone</label><input id="user-phone" type="tel" value={userForm.phone} onChange={(event) => setUserForm({ ...userForm, phone: event.target.value })} placeholder="(00) 00000-0000" /></div>
+      {editingUser && <div className="form-field"><label htmlFor="user-status">Situação do usuário</label><select id="user-status" value={userForm.status} disabled={editingUser.id === currentUser.id} onChange={(event) => setUserForm({ ...userForm, status: event.target.value as User["status"] })}><option value="Ativo">Ativo</option><option value="Inativo">Inativo</option></select>{editingUser.id === currentUser.id && <small className="form-hint">Não é possível desativar a própria conta durante esta sessão.</small>}</div>}
       {!editingUser && <div className="user-password-fields"><h3>Acesso ao workspace</h3><p>Defina a senha que a pessoa usará para entrar. Use ao menos 12 caracteres.</p><div className="form-field"><label htmlFor="new-user-password">Senha <em>*</em></label><input id="new-user-password" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.password} onChange={(event) => setPasswordForm({ ...passwordForm, password: event.target.value })} /></div><div className="form-field"><label htmlFor="new-user-password-confirm">Confirmação da senha <em>*</em></label><input id="new-user-password-confirm" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.confirmation} onChange={(event) => setPasswordForm({ ...passwordForm, confirmation: event.target.value })} /></div></div>}
       <div className="modal-actions"><button className="button secondary" onClick={() => setUserModal(false)}>Cancelar</button><button className="button primary" onClick={() => void saveUser()}>{editingUser ? "Salvar alterações" : "Adicionar usuário"}</button></div>
       {editingUser && <section className="password-reset-section"><h3>Redefinir senha</h3><p>A pessoa precisará entrar novamente com a nova senha.</p><div className="form-field"><label htmlFor="reset-user-password">Senha <em>*</em></label><input id="reset-user-password" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.password} onChange={(event) => setPasswordForm({ ...passwordForm, password: event.target.value })} /></div><div className="form-field"><label htmlFor="reset-user-password-confirm">Confirmação da senha <em>*</em></label><input id="reset-user-password-confirm" type="password" autoComplete="new-password" maxLength={128} value={passwordForm.confirmation} onChange={(event) => setPasswordForm({ ...passwordForm, confirmation: event.target.value })} /></div><div className="modal-actions"><button className="button secondary" disabled={passwordBusy} onClick={() => setPasswordForm({ password: "", confirmation: "" })}>Limpar</button><button className="button primary" disabled={passwordBusy} onClick={() => void saveUserPassword()}>{passwordBusy ? "Salvando..." : "Redefinir senha"}</button></div></section>}
@@ -366,17 +401,20 @@ function AssigneeOptions({ users, selected, onChange }: { users: User[]; selecte
   return <div className="assignee-options">{available.map((user) => <label className="assignee-option" key={user.id}><input type="checkbox" checked={selected.includes(user.id)} onChange={(event) => onChange(event.target.checked ? [...selected, user.id] : selected.filter((id) => id !== user.id))} /><span className={`avatar avatar-${user.color}`}>{user.initials}</span><span>{user.name}</span></label>)}</div>;
 }
 
-function Dashboard({ tasks, projectCount, taskCount, pendingCount, doneCount, onNewTask, onNewProject, onPage, onTask }: { tasks: Task[]; projectCount: number; taskCount: number; pendingCount: number; doneCount: number; onNewTask: () => void; onNewProject: () => void; onPage: (page: string) => void; onTask: (task: Task) => void }) {
+function Dashboard({ userName, tasks, taskTrends, recentActivity, projectCount, taskCount, pendingCount, doneCount, onNewTask, onNewProject, onPage, onTask }: { userName: string; tasks: Task[]; taskTrends: TaskTrend[]; recentActivity: TaskActivity[]; projectCount: number; taskCount: number; pendingCount: number; doneCount: number; onNewTask: () => void; onNewProject: () => void; onPage: (page: string) => void; onTask: (task: Task) => void }) {
   const inProgress = tasks.filter((task) => task.status === "Em progresso").length;
+  const maxChartValue = Math.max(4, Math.ceil(Math.max(0, ...taskTrends.flatMap((day) => [day.created, day.completed])) / 4) * 4);
+  const axisLabels = [maxChartValue, maxChartValue * 0.75, maxChartValue * 0.5, maxChartValue * 0.25, 0];
+  const hasChartActivity = taskTrends.some((day) => day.created > 0 || day.completed > 0);
   return <div className="page-stack">
-    <div className="page-heading"><div><div className="eyebrow">VISÃO GERAL DO WORKSPACE</div><h1>Bom dia, Alex <span className="wave">✦</span></h1><p>Aqui está o resumo do que está acontecendo no seu workspace.</p></div><div className="heading-actions"><button className="button secondary" onClick={onNewProject}><Plus size={16} /> Novo projeto</button><button className="button primary" onClick={onNewTask}><Plus size={16} /> Nova tarefa</button></div></div>
+    <div className="page-heading"><div><div className="eyebrow">VISÃO GERAL DO WORKSPACE</div><h1>Bom dia, {userName.split(/\s+/)[0]} <span className="wave">✦</span></h1><p>Aqui está o resumo do que está acontecendo no seu workspace.</p></div><div className="heading-actions"><button className="button secondary" onClick={onNewProject}><Plus size={16} /> Novo projeto</button><button className="button primary" onClick={onNewTask}><Plus size={16} /> Nova tarefa</button></div></div>
     <div className="metric-grid"><Metric title="Total de projetos" value={String(projectCount).padStart(2, "0")} change="Projetos cadastrados" trend="up" icon={<FolderKanban size={19} />} tone="purple" onClick={() => onPage("Projetos")} /><Metric title="Total de tarefas" value={String(taskCount).padStart(2, "0")} change="Tarefas cadastradas" trend="up" icon={<ClipboardList size={19} />} tone="blue" onClick={() => onPage("Quadro Kanban")} /><Metric title="Tarefas pendentes" value={String(pendingCount).padStart(2, "0")} change="Precisam de atenção" trend="neutral" icon={<Clock3 size={19} />} tone="amber" onClick={() => onPage("Quadro Kanban")} /><Metric title="Tarefas concluídas" value={String(doneCount).padStart(2, "0")} change={`${Math.round(doneCount / Math.max(taskCount, 1) * 100)}% das tarefas`} trend="up" icon={<CheckCheck size={19} />} tone="green" onClick={() => onPage("Quadro Kanban")} /></div>
     <div className="dashboard-grid">
-      <section className="panel progress-panel"><div className="panel-heading"><div><h2>Visão geral das tarefas</h2><p>Acompanhe o ritmo de entrega da equipe</p></div><button className="select-button">Últimos 7 dias <ChevronDown size={14} /></button></div><div className="chart-area"><div className="y-axis"><span>20</span><span>15</span><span>10</span><span>5</span><span>0</span></div><div className="chart-main"><div className="chart-gridlines"><i /><i /><i /><i /><i /></div><div className="bar-chart">{[{ d: "Qui", a: 48, b: 27 }, { d: "Sex", a: 68, b: 38 }, { d: "Sáb", a: 28, b: 18 }, { d: "Dom", a: 20, b: 13 }, { d: "Seg", a: 82, b: 48 }, { d: "Ter", a: 61, b: 39 }, { d: "Qua", a: 92, b: 58 }].map((value) => <div className="bar-group" key={value.d}><div className="bars"><span className="bar created" style={{ height: `${value.a}%` }} /><span className="bar completed" style={{ height: `${value.b}%` }} /></div><span className="bar-label">{value.d}</span></div>)}</div></div></div><div className="chart-legend"><span><i className="legend-dot created-dot" /> Tarefas criadas</span><span><i className="legend-dot completed-dot" /> Tarefas concluídas</span><span className="chart-note">Visual demonstrativa</span></div></section>
+      <section className="panel progress-panel"><div className="panel-heading"><div><h2>Visão geral das tarefas</h2><p>Criações e conclusões registradas por dia</p></div><span className="select-button chart-period">Últimos 7 dias</span></div><div className="chart-area"><div className="y-axis">{axisLabels.map((value, index) => <span key={index}>{value}</span>)}</div><div className="chart-main"><div className="chart-gridlines"><i /><i /><i /><i /><i /></div><div className="bar-chart">{taskTrends.map((value) => <div className="bar-group" key={value.date}><div className="bars"><span className="bar created" title={`${value.created} tarefa(s) criada(s)`} style={{ height: `${value.created / maxChartValue * 100}%`, minHeight: value.created ? 4 : 0 }} /><span className="bar completed" title={`${value.completed} tarefa(s) concluída(s)`} style={{ height: `${value.completed / maxChartValue * 100}%`, minHeight: value.completed ? 4 : 0 }} /></div><span className="bar-label">{taskActivityDateLabel(value.date)}</span></div>)}</div></div></div><div className="chart-legend"><span><i className="legend-dot created-dot" /> Tarefas criadas</span><span><i className="legend-dot completed-dot" /> Tarefas concluídas</span><span className="chart-note">{hasChartActivity ? "Dados reais do workspace" : "Sem movimentação nos últimos 7 dias"}</span></div></section>
       <section className="panel status-panel"><div className="panel-heading"><div><h2>Status das tarefas</h2><p>Distribuição atual</p></div><button className="icon-button" aria-label="Abrir Kanban" onClick={() => onPage("Quadro Kanban")}><Ellipsis size={19} /></button></div><div className="donut-wrap"><div className="donut"><div className="donut-center"><strong>{taskCount}</strong><span>tarefas</span></div></div></div><div className="status-legend"><div><span><i className="status-dot pending-dot" /> Pendente</span><strong>{pendingCount}</strong></div><div><span><i className="status-dot progress-dot" /> Em progresso</span><strong>{inProgress}</strong></div><div><span><i className="status-dot done-dot" /> Finalizado</span><strong>{doneCount}</strong></div></div></section>
     </div>
     <div className="lower-grid"><section className="panel tasks-panel"><div className="panel-heading"><div><h2>Tarefas recentes</h2><p>Atividades que merecem sua atenção</p></div><button className="text-button" onClick={() => onPage("Quadro Kanban")}>Ver todas <ChevronRight size={15} /></button></div><div className="recent-list">{tasks.slice(0, 4).map((task) => <button className="recent-task" key={task.id} onClick={() => onTask(task)}><span className={`task-status-icon ${task.status === "Finalizado" ? "is-done" : task.status === "Em progresso" ? "is-progress" : ""}`}>{task.status === "Finalizado" ? <Check size={14} /> : task.status === "Em progresso" ? <Activity size={14} /> : <Circle size={13} />}</span><span className="recent-task-main"><strong>{task.title}</strong><small>{task.project}</small></span><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><span className="recent-due"><CalendarDays size={13} />{taskDateLabel(task.dueDate)}</span></button>)}</div></section>
-      <section className="panel activity-panel"><div className="panel-heading"><div><h2>Atividade recente</h2><p>Últimas atualizações do workspace</p></div><button className="icon-button" aria-label="Projetos" onClick={() => onPage("Projetos")}><Ellipsis size={19} /></button></div><div className="activity-list"><ActivityItem initials="MC" color="pink" title="Marina criou uma tarefa" detail="Mapear jornada do usuário" time="Há 12 min" /><ActivityItem initials="AA" color="purple" title="Você atualizou o status" detail="Revisar arquitetura da API" time="Há 38 min" /><ActivityItem initials="RL" color="blue" title="Rafael concluiu uma tarefa" detail="Ajustar responsividade mobile" time="Há 2 h" /><ActivityItem initials="MC" color="pink" title="Marina adicionou um comentário" detail="Redesign da plataforma" time="Há 3 h" /></div></section>
+      <section className="panel activity-panel"><div className="panel-heading"><div><h2>Atividade recente</h2><p>Últimas alterações de tarefas registradas</p></div><button className="icon-button" aria-label="Abrir quadro Kanban" onClick={() => onPage("Quadro Kanban")}><Ellipsis size={19} /></button></div><div className="activity-list">{recentActivity.map((activity) => <ActivityItem key={activity.id} initials={activity.actorInitials || "--"} color={activity.actorColor} title={taskActivityLabel(activity)} detail={`${activity.taskTitle} · ${activity.projectName}`} time={taskActivityTime(activity.occurredAt)} />)}{recentActivity.length === 0 && <div className="activity-empty">Nenhuma atividade de tarefa registrada ainda.</div>}</div></section>
     </div>
     <div className="tip-banner"><div className="tip-icon"><Sparkles size={19} /></div><div><strong>Um bom projeto começa com clareza.</strong><p>Organize as próximas entregas no Kanban e mantenha todos na mesma página.</p></div><button className="text-button" onClick={() => onPage("Quadro Kanban")}>Abrir Kanban <ArrowUpRight size={15} /></button></div>
   </div>;
@@ -414,7 +452,7 @@ function UsersView({ users, onNew, onEdit }: { users: User[]; onNew: () => void;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Todos");
   const filtered = users.filter((user) => (user.name + " " + (user.email ?? "") + " " + user.jobTitle + " " + user.accessRole).toLowerCase().includes(search.toLowerCase()) && (filter === "Todos" || user.status === filter));
-  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">EQUIPE E ACESSOS</div><h1>Usuários</h1><p>Gerencie os membros, seus papéis e o acesso ao workspace.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Adicionar usuário</button></div><div className="toolbar"><div className="search-box user-search"><Search size={15} /><input aria-label="Buscar usuários" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou e-mail" /></div><div className="toolbar-right"><select className="select-button" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select><button className="button secondary" onClick={() => { setFilter("Todos"); setSearch(""); }}><SlidersHorizontal size={15} /> Limpar filtros</button></div></div><div className="panel table-panel"><table><thead><tr><th>Usuário</th><th>Perfil de acesso</th><th>Situação</th><th>Acesso</th><th>Última atividade</th><th /></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><div className="user-cell"><div className={`avatar avatar-${user.color}`}>{user.initials}</div><div><strong>{user.name}</strong><small>{user.email || "Sem e-mail"}</small><small>{[user.jobTitle, user.phone].filter(Boolean).join(" · ")}</small></div></div></td><td><span className="role-pill">{user.accessRole}</span></td><td><span className={`status-pill ${user.status === "Ativo" ? "active" : "inactive"}`}><i />{user.status}</span></td><td><span className={`status-pill ${user.hasAccess ? "active" : "inactive"}`}><i />{user.hasAccess ? "Habilitado" : "Senha pendente"}</span></td><td className="muted">—</td><td><button className="icon-button" onClick={() => onEdit(user)} title="Editar dados e senha do usuário" aria-label={`Editar ${user.name}`}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><UsersIcon size={26} /><strong>Nenhum usuário encontrado</strong></div>}</div><div className="page-footnote"><span>{filtered.length} de {users.length} usuários</span><span>Cadastro do workspace</span></div></div>;
+  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">EQUIPE E ACESSOS</div><h1>Usuários</h1><p>Gerencie os membros, seus papéis e o acesso ao workspace.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Adicionar usuário</button></div><div className="toolbar"><div className="search-box user-search"><Search size={15} /><input aria-label="Buscar usuários" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou e-mail" /></div><div className="toolbar-right"><select className="select-button" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select><button className="button secondary" onClick={() => { setFilter("Todos"); setSearch(""); }}><SlidersHorizontal size={15} /> Limpar filtros</button></div></div><div className="panel table-panel"><table><thead><tr><th>Usuário</th><th>Perfil de acesso</th><th>Situação</th><th>Acesso</th><th>Última atividade</th><th /></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><div className="user-cell"><div className={`avatar avatar-${user.color}`}>{user.initials}</div><div><strong>{user.name}</strong><small>{user.email || "Sem e-mail"}</small><small>{[user.jobTitle, user.phone].filter(Boolean).join(" · ")}</small></div></div></td><td><span className="role-pill">{user.accessRole}</span></td><td><span className={`status-pill ${user.status === "Ativo" ? "active" : "inactive"}`}><i />{user.status}</span></td><td><span className={`status-pill ${user.status === "Ativo" && user.hasAccess ? "active" : "inactive"}`}><i />{user.status === "Inativo" ? "Desativado" : user.hasAccess ? "Habilitado" : "Senha pendente"}</span></td><td className="muted">—</td><td><button className="icon-button" onClick={() => onEdit(user)} title="Editar dados, situação e senha do usuário" aria-label={`Editar ${user.name}`}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><UsersIcon size={26} /><strong>Nenhum usuário encontrado</strong></div>}</div><div className="page-footnote"><span>{filtered.length} de {users.length} usuários</span><span>Cadastro do workspace</span></div></div>;
 }
 
 function SettingsView({ user, saved, theme, onTheme, onSaveProfile, onSavePreferences }: { user: User | null; saved: boolean; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; onSaveProfile: (profile: Pick<User, "name" | "email" | "jobTitle" | "phone">) => Promise<void>; onSavePreferences: () => void }) {

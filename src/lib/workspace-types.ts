@@ -56,4 +56,26 @@ export type WorkspaceData = {
   users: User[];
   projects: Project[];
   tasks: Task[];
+  taskTrends: TaskTrend[];
+  recentActivity: TaskActivity[];
+};
+
+export type TaskTrend = {
+  date: string;
+  created: number;
+  completed: number;
+};
+
+export type TaskActivity = {
+  id: string;
+  eventType: "task_created" | "task_updated" | "task_status_changed";
+  actorId: string | null;
+  actorName: string;
+  actorInitials: string;
+  actorColor: string;
+  taskTitle: string;
+  projectName: string;
+  fromStatus: TaskStatus | null;
+  toStatus: TaskStatus | null;
+  occurredAt: string;
 };

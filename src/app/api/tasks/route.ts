@@ -32,6 +32,14 @@ export async function POST(request: Request): Promise<Response> {
     for (const [position, item] of task.checklist.entries()) {
       await client.query("INSERT INTO nexo.task_checklist_items (task_id, title, position, is_completed) VALUES ($1, $2, $3, $4)", [taskId, item.title, position, item.completed]);
     }
+    await client.query(
+      `INSERT INTO nexo.task_activity
+         (task_id, actor_id, actor_name, actor_initials, actor_color, event_type, task_title, project_name, to_status)
+       SELECT t.id, $2, $3, $4, $5, 'task_created', t.title, p.name, t.status
+       FROM nexo.tasks t JOIN nexo.projects p ON p.id = t.project_id
+       WHERE t.id = $1`,
+      [taskId, authorization.user.id, authorization.user.name, authorization.user.initials, authorization.user.color],
+    );
 
     await client.query("COMMIT");
     return Response.json({ id: taskId }, { status: 201 });
