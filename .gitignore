@@ -6,3 +6,6 @@ out
 .env.*.local
 .vercel
 .DS_Store
+.playwright-cli
+.playwright-mcp
+.superpowers

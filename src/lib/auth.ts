@@ -33,7 +33,20 @@ export function emailAttemptHash(email: string): string {
 
 export function isSameOriginMutation(request: Request): boolean {
   if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) return true;
-  const requestOrigin = new URL(request.url).origin;
+
+  const requestUrl = new URL(request.url);
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host")?.trim();
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  let requestOrigin = requestUrl.origin;
+  if (host) {
+    try {
+      requestOrigin = new URL(`${forwardedProtocol || requestUrl.protocol.slice(0, -1)}://${host}`).origin;
+    } catch {
+      return false;
+    }
+  }
+
   const origin = request.headers.get("origin");
   if (origin) return origin === requestOrigin;
   const referer = request.headers.get("referer");

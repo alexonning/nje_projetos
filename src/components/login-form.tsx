@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
 import { Command, LockKeyhole, Mail } from "lucide-react";
 
 export default function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,8 +30,7 @@ export default function LoginForm() {
         setError(result?.error || "Não foi possível entrar. Confira seus dados e tente novamente.");
         return;
       }
-      router.replace("/");
-      router.refresh();
+      window.location.replace("/");
     } catch {
       setError("Não foi possível conectar ao workspace. Tente novamente.");
     } finally {
@@ -47,7 +49,7 @@ export default function LoginForm() {
         <h1 id="login-title">Boas-vindas de volta</h1>
         <p>Entre com o e-mail e a senha fornecidos pelo administrador.</p>
       </div>
-      <form className="auth-form" onSubmit={submit}>
+      <form className="auth-form" method="post" onSubmit={submit}>
         <div className="auth-field">
           <label htmlFor="login-email">E-mail</label>
           <div className="auth-input-wrap"><Mail size={17} /><input id="login-email" name="email" type="email" autoComplete="username" inputMode="email" maxLength={254} required autoFocus value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@empresa.com" /></div>
@@ -57,7 +59,7 @@ export default function LoginForm() {
           <div className="auth-input-wrap"><LockKeyhole size={17} /><input id="login-password" name="password" type="password" autoComplete="current-password" maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Digite sua senha" /></div>
         </div>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button className="button primary auth-submit" type="submit" disabled={submitting}>
+        <button className="button primary auth-submit" type="submit" disabled={submitting || !ready}>
           {submitting ? "Entrando..." : "Entrar no workspace"}
         </button>
       </form>

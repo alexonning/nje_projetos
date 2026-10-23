@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity, ArrowDownRight, ArrowUpRight, Bell, CalendarDays, Check,
   CheckCheck, ChevronDown, ChevronRight, Circle, CircleHelp, ClipboardList,
@@ -9,7 +9,7 @@ import {
   Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search,
   Settings2, SlidersHorizontal, Sparkles, Users as UsersIcon, X, Zap,
 } from "lucide-react";
-import type { Project, Task, TaskActivity, TaskPriority, TaskStatus, TaskTrend, ThemePreference, User, WorkspaceData } from "@/lib/workspace-types";
+import type { Project, Task, TaskActivity, TaskPriority, TaskStatus, TaskTrend, User, WorkspaceData } from "@/lib/workspace-types";
 
 type TaskPayload = {
   title: string;
@@ -72,35 +72,42 @@ function taskActivityDateLabel(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(new Date(`${value}T12:00:00`)).replace(".", "");
 }
 
-function useThemePreference() {
-  const [theme, setTheme] = useState<ThemePreference>("Claro");
-  const [ready, setReady] = useState(false);
+function workspaceLocation(pathname: string): { page: string; projectId: string | null } {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const projectMatch = path.match(/^\/projetos\/([^/]+)$/);
+  if (projectMatch) return { page: "Quadro Kanban", projectId: projectMatch[1] };
+  if (path === "/projetos") return { page: "Projetos", projectId: null };
+  if (path === "/tarefas") return { page: "Quadro Kanban", projectId: null };
+  if (path === "/usuarios") return { page: "Usuários", projectId: null };
+  if (path === "/configuracoes") return { page: "Configurações", projectId: null };
+  return { page: "Dashboard", projectId: null };
+}
 
+function workspacePath(page: string, projectId: string | null): string {
+  if (page === "Projetos") return "/projetos";
+  if (page === "Usuários") return "/usuarios";
+  if (page === "Configurações") return "/configuracoes";
+  if (page === "Quadro Kanban") return projectId ? `/projetos/${encodeURIComponent(projectId)}` : "/tarefas";
+  return "/dashboard";
+}
+
+function useEnforceLightTheme() {
   useEffect(() => {
-    const saved = localStorage.getItem("nexo-theme");
-    if (saved === "Claro" || saved === "Escuro" || saved === "Sistema") setTheme(saved);
-    setReady(true);
+    localStorage.setItem("nexo-theme", "Claro");
   }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const dark = theme === "Escuro" || (theme === "Sistema" && media.matches);
-      document.documentElement.dataset.theme = dark ? "dark" : "light";
-    };
-    apply();
-    localStorage.setItem("nexo-theme", theme);
-    if (theme === "Sistema") media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [ready, theme]);
-
-  return [theme, setTheme] as const;
 }
 
 export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const router = useRouter();
-  const [page, setPage] = useState("Dashboard");
+  const pathname = usePathname();
+  const location = workspaceLocation(pathname);
+  const page = location.page;
+  const navigateToPage = useCallback((nextPage: string) => {
+    router.push(workspacePath(nextPage, location.projectId));
+  }, [location.projectId, router]);
+  const navigateToProject = useCallback((projectId: string) => {
+    router.push(`/projetos/${encodeURIComponent(projectId)}`);
+  }, [router]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [search, setSearch] = useState("");
@@ -122,7 +129,6 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const [newChecklist, setNewChecklist] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [toast, setToast] = useState("");
-  const [selectedProject, setSelectedProject] = useState("Todos os projetos");
   const [taskDetails, setTaskDetails] = useState<Task | null>(null);
   const [checklistDraft, setChecklistDraft] = useState("");
   const [projectModal, setProjectModal] = useState(false);
@@ -135,7 +141,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const [passwordForm, setPasswordForm] = useState({ password: "", confirmation: "" });
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
-  const [theme, setTheme] = useThemePreference();
+  useEnforceLightTheme();
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -163,18 +169,19 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
 
   const currentUser = users.find((user) => user.id === initialUser.id) ?? initialUser;
   const isAdmin = currentUser.accessRole === "Administrador";
+  const activeProject = location.projectId ? projects.find((project) => project.id === location.projectId) ?? null : null;
   const visibleTasks = useMemo(() => tasks.filter((task) =>
     (task.title + " " + task.project + " " + task.owner + " " + task.tags.join(" ")).toLowerCase().includes(search.toLowerCase())
-    && (selectedProject === "Todos os projetos" || task.project === selectedProject),
-  ), [tasks, search, selectedProject]);
+    && (!location.projectId || task.projectId === location.projectId),
+  ), [tasks, search, location.projectId]);
   const taskCount = tasks.length;
   const pendingCount = tasks.filter((task) => task.status === "Pendente").length;
   const doneCount = tasks.filter((task) => task.status === "Finalizado").length;
 
-  const openNewTask = (projectName?: string) => {
-    const project = projectName ? projects.find((item) => item.name === projectName) : undefined;
+  const openNewTask = (projectId?: string) => {
+    const project = projectId ? projects.find((item) => item.id === projectId) : undefined;
     setNewProjectId(project?.id ?? "");
-    setNewTaskProjectLocked(Boolean(project));
+    setNewTaskProjectLocked(Boolean(projectId));
     setShowNewTask(true);
   };
 
@@ -231,7 +238,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
     try {
       await apiRequest("/api/projects", "POST", { name: newProjectName.trim(), description: newProjectDescription.trim(), dueDate: newProjectDueDate || null });
       await reloadWorkspace();
-      setNewProjectName(""); setNewProjectDescription(""); setNewProjectDueDate(""); setProjectModal(false); setPage("Projetos");
+      setNewProjectName(""); setNewProjectDescription(""); setNewProjectDueDate(""); setProjectModal(false); navigateToPage("Projetos");
       notify("Projeto criado com sucesso.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível criar o projeto.");
@@ -288,8 +295,7 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
   const signOut = async () => {
     try {
       await apiRequest("/api/auth/logout", "POST", {});
-      router.replace("/login");
-      router.refresh();
+      window.location.replace("/login");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível encerrar a sessão.");
     }
@@ -323,16 +329,16 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       {!collapsed && <div className="workspace-switch"><div className="workspace-avatar">A</div><div className="workspace-meta"><strong>{currentUser?.name ?? "Workspace"}</strong><span>Workspace pessoal</span></div><ChevronDown size={15} /></div>}
       <div className="nav-caption">{!collapsed && "MENU PRINCIPAL"}</div>
       <nav className="nav-list">
-        {navItems.map((item) => <button key={item.label} className={`nav-item ${page === item.label ? "active" : ""}`} onClick={() => { setPage(item.label); setMobileNav(false); }} title={collapsed ? item.label : undefined}><item.icon size={18} />{!collapsed && <span>{item.label}</span>}{!collapsed && item.label === "Projetos" && <span className="nav-count">{projects.length}</span>}</button>)}
+        {navItems.map((item) => <button key={item.label} className={`nav-item ${page === item.label || (location.projectId !== null && item.label === "Projetos") ? "active" : ""}`} onClick={() => { navigateToPage(item.label); setMobileNav(false); }} title={collapsed ? item.label : undefined}><item.icon size={18} />{!collapsed && <span>{item.label}</span>}{!collapsed && item.label === "Projetos" && <span className="nav-count">{projects.length}</span>}</button>)}
       </nav>
       {!collapsed && <div className="sidebar-section">
         <div className="sidebar-section-head"><span>SEUS PROJETOS</span><button className="tiny-icon" onClick={() => setProjectModal(true)} aria-label="Adicionar projeto"><Plus size={15} /></button></div>
-        {projects.slice(0, 3).map((project) => <button className="project-nav" key={project.id} onClick={() => { setPage("Projetos"); setSelectedProject(project.name); }}><span className={`project-dot ${project.color}`} /><span>{project.name}</span></button>)}
-        <button className="see-all" onClick={() => { setPage("Projetos"); setSelectedProject("Todos os projetos"); }}>Ver todos os projetos <ChevronRight size={14} /></button>
+        {projects.slice(0, 3).map((project) => <button className="project-nav" key={project.id} onClick={() => navigateToProject(project.id)}><span className={`project-dot ${project.color}`} /><span>{project.name}</span></button>)}
+        <button className="see-all" onClick={() => navigateToPage("Projetos")}>Ver todos os projetos <ChevronRight size={14} /></button>
       </div>}
       <div className="sidebar-bottom">
         <button className="nav-item help-item" onClick={() => notify("Central de ajuda em breve.")}><CircleHelp size={18} />{!collapsed && <span>Central de ajuda</span>}</button>
-        <div className="profile-row"><div className={`avatar avatar-${currentUser?.color ?? "purple"}`}>{currentUser?.initials ?? "AA"}</div>{!collapsed && <><div className="profile-copy"><strong>{currentUser?.name ?? "Usuário"}</strong><span>{currentUser?.accessRole ?? "Workspace"}</span></div><button className="tiny-icon" aria-label="Abrir configurações do perfil" onClick={() => setPage("Configurações")}><MoreHorizontal size={18} /></button></>}</div>
+        <div className="profile-row"><div className={`avatar avatar-${currentUser?.color ?? "purple"}`}>{currentUser?.initials ?? "AA"}</div>{!collapsed && <><div className="profile-copy"><strong>{currentUser?.name ?? "Usuário"}</strong><span>{currentUser?.accessRole ?? "Workspace"}</span></div><button className="tiny-icon" aria-label="Abrir configurações do perfil" onClick={() => navigateToPage("Configurações")}><MoreHorizontal size={18} /></button></>}</div>
       </div>
     </aside>
 
@@ -343,11 +349,12 @@ export default function WorkspaceApp({ initialUser }: { initialUser: User }) {
       </header>
 
       <div className="content-area">
-        {page === "Dashboard" && <Dashboard userName={currentUser.name} tasks={tasks} taskTrends={taskTrends} recentActivity={recentActivity} projectCount={projects.length} taskCount={taskCount} pendingCount={pendingCount} doneCount={doneCount} onNewTask={() => openNewTask()} onNewProject={() => setProjectModal(true)} onPage={setPage} onTask={setTaskDetails} />}
-        {page === "Projetos" && <ProjectsView projects={projects} selected={selectedProject} search={search} onSelect={setSelectedProject} onNew={() => setProjectModal(true)} onOpenProject={(name) => { setSelectedProject(name); setPage("Quadro Kanban"); }} />}
-        {page === "Quadro Kanban" && <KanbanView tasks={visibleTasks.filter((task) => selectedProject === "Todos os projetos" || task.project === selectedProject)} onMove={moveTask} onTask={setTaskDetails} onNew={() => openNewTask(selectedProject === "Todos os projetos" ? undefined : selectedProject)} project={selectedProject} />}
+        {page === "Dashboard" && <Dashboard userName={currentUser.name} tasks={tasks} taskTrends={taskTrends} recentActivity={recentActivity} projectCount={projects.length} taskCount={taskCount} pendingCount={pendingCount} doneCount={doneCount} onNewTask={() => openNewTask()} onNewProject={() => setProjectModal(true)} onPage={navigateToPage} onTask={setTaskDetails} />}
+        {page === "Projetos" && <ProjectsView projects={projects} search={search} onNew={() => setProjectModal(true)} onOpenProject={navigateToProject} />}
+        {page === "Quadro Kanban" && location.projectId && !loading && !activeProject && <div className="empty-state"><FolderKanban size={28} /><strong>Projeto não encontrado</strong><span>Este projeto não existe ou não está mais disponível.</span><button className="button secondary" onClick={() => navigateToPage("Projetos")}>Voltar para projetos</button></div>}
+        {page === "Quadro Kanban" && (!location.projectId || activeProject) && <KanbanView tasks={visibleTasks} onMove={moveTask} onTask={setTaskDetails} onNew={() => openNewTask(activeProject?.id)} project={activeProject?.name ?? "Todos os projetos"} />}
         {page === "Usuários" && isAdmin && <UsersView users={users} onNew={() => openUserModal()} onEdit={openUserModal} />}
-        {page === "Configurações" && <SettingsView user={currentUser} saved={settingsSaved} theme={theme} onTheme={setTheme} onSaveProfile={saveProfile} onSavePreferences={() => { setSettingsSaved(true); notify("Preferências salvas."); }} />}
+        {page === "Configurações" && <SettingsView user={currentUser} saved={settingsSaved} onSaveProfile={saveProfile} onSavePreferences={() => { setSettingsSaved(true); notify("Preferências salvas."); }} />}
         {loading && <div className="page-footnote">Carregando dados do PostgreSQL…</div>}
       </div>
     </main>
@@ -459,14 +466,13 @@ function ActivityItem({ initials, color, title, detail, time }: { initials: stri
   return <div className="activity-item"><div className={`avatar avatar-${color}`}>{initials}</div><div className="activity-copy"><strong>{title}</strong><span>{detail}</span><small>{time}</small></div></div>;
 }
 
-function ProjectsView({ projects, selected, search, onSelect, onNew, onOpenProject }: { projects: Project[]; selected: string; search: string; onSelect: (name: string) => void; onNew: () => void; onOpenProject: (name: string) => void }) {
+function ProjectsView({ projects, search, onNew, onOpenProject }: { projects: Project[]; search: string; onNew: () => void; onOpenProject: (projectId: string) => void }) {
   const [view, setView] = useState<"cards" | "table">("cards");
   const [filter, setFilter] = useState("Todos");
   const filtered = projects.filter((project) => (filter === "Todos" || project.status === filter)
-    && (selected === "Todos os projetos" || project.name === selected)
     && project.name.toLowerCase().includes(search.trim().toLowerCase()));
-  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">ORGANIZAÇÃO E ACOMPANHAMENTO</div><h1>Projetos</h1><p>Gerencie iniciativas, acompanhe entregas e mantenha a equipe alinhada.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Novo projeto</button></div><div className="toolbar"><div className="filter-pills">{["Todos", "Ativo", "Concluído"].map((status) => <button className={filter === status ? "selected" : ""} key={status} onClick={() => setFilter(status)}>{status}<span>{status === "Todos" ? projects.length : projects.filter((project) => project.status === status).length}</span></button>)}</div><div className="toolbar-right"><button className="select-button" onClick={() => onSelect("Todos os projetos")}><ListFilter size={14} /> {selected === "Todos os projetos" ? "Todos os projetos" : selected}<ChevronDown size={14} /></button><div className="view-toggle"><button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")} aria-label="Visualização em cards"><div className="grid-glyph" /></button><button className={view === "table" ? "active" : ""} onClick={() => setView("table")} aria-label="Visualização em tabela"><ClipboardList size={16} /></button></div></div></div>
-    {view === "cards" ? <div className="project-grid">{filtered.map((project) => <article className="project-card" key={project.id}><div className="project-card-top"><div className={`project-symbol ${project.color}`}><FolderKanban size={20} /></div><button className="icon-button" aria-label="Mais opções"><MoreHorizontal size={18} /></button></div><div className="project-card-title"><h3>{project.name}</h3><span className={`status-pill ${project.status === "Concluído" ? "complete" : "active"}`}><i />{project.status}</span></div><p className="project-description">{project.desc}</p><div className="project-progress-label"><span>Progresso</span><strong>{project.progress}%</strong></div><div className="progress-track"><span style={{ width: `${project.progress}%` }} className={project.color} /></div><div className="project-card-meta"><span><ClipboardList size={14} />{project.tasks} tarefas</span><span><CalendarDays size={14} />{projectDateLabel(project.dueDate)}</span></div><div className="project-card-bottom"><div className="avatar-stack">{project.initials.map((initials, index) => <span key={`${project.id}-${initials}`} className={`avatar-stack-item stack-${index}`}>{initials}</span>)}</div><button className="button small secondary" onClick={() => onOpenProject(project.name)}>Abrir projeto <ArrowUpRight size={14} /></button></div></article>)}</div> : <div className="panel table-panel"><table><thead><tr><th>Projeto</th><th>Situação</th><th>Tarefas</th><th>Progresso</th><th>Prazo final</th><th /></tr></thead><tbody>{filtered.map((project) => <tr key={project.id}><td><strong>{project.name}</strong><small>{project.desc}</small></td><td><span className={`status-pill ${project.status === "Concluído" ? "complete" : "active"}`}><i />{project.status}</span></td><td>{project.tasks}</td><td><div className="table-progress"><div className="progress-track"><span style={{ width: `${project.progress}%` }} /></div>{project.progress}%</div></td><td>{projectDateLabel(project.dueDate)}</td><td><button className="icon-button" aria-label={`Abrir ${project.name}`} onClick={() => onOpenProject(project.name)}><ChevronRight size={17} /></button></td></tr>)}</tbody></table></div>}
+  return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">ORGANIZAÇÃO E ACOMPANHAMENTO</div><h1>Projetos</h1><p>Gerencie iniciativas, acompanhe entregas e mantenha a equipe alinhada.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Novo projeto</button></div><div className="toolbar"><div className="filter-pills">{["Todos", "Ativo", "Concluído"].map((status) => <button className={filter === status ? "selected" : ""} key={status} onClick={() => setFilter(status)}>{status}<span>{status === "Todos" ? projects.length : projects.filter((project) => project.status === status).length}</span></button>)}</div><div className="toolbar-right"><span className="select-button"><ListFilter size={14} /> Todos os projetos <ChevronDown size={14} /></span><div className="view-toggle"><button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")} aria-label="Visualização em cards"><div className="grid-glyph" /></button><button className={view === "table" ? "active" : ""} onClick={() => setView("table")} aria-label="Visualização em tabela"><ClipboardList size={16} /></button></div></div></div>
+    {view === "cards" ? <div className="project-grid">{filtered.map((project) => <article className="project-card" key={project.id}><div className="project-card-top"><div className={`project-symbol ${project.color}`}><FolderKanban size={20} /></div><button className="icon-button" aria-label="Mais opções"><MoreHorizontal size={18} /></button></div><div className="project-card-title"><h3>{project.name}</h3><span className={`status-pill ${project.status === "Concluído" ? "complete" : "active"}`}><i />{project.status}</span></div><p className="project-description">{project.desc}</p><div className="project-progress-label"><span>Progresso</span><strong>{project.progress}%</strong></div><div className="progress-track"><span style={{ width: `${project.progress}%` }} className={project.color} /></div><div className="project-card-meta"><span><ClipboardList size={14} />{project.tasks} tarefas</span><span><CalendarDays size={14} />{projectDateLabel(project.dueDate)}</span></div><div className="project-card-bottom"><div className="avatar-stack">{project.initials.map((initials, index) => <span key={`${project.id}-${initials}`} className={`avatar-stack-item stack-${index}`}>{initials}</span>)}</div><button className="button small secondary" onClick={() => onOpenProject(project.id)}>Abrir projeto <ArrowUpRight size={14} /></button></div></article>)}</div> : <div className="panel table-panel"><table><thead><tr><th>Projeto</th><th>Situação</th><th>Tarefas</th><th>Progresso</th><th>Prazo final</th><th /></tr></thead><tbody>{filtered.map((project) => <tr key={project.id}><td><strong>{project.name}</strong><small>{project.desc}</small></td><td><span className={`status-pill ${project.status === "Concluído" ? "complete" : "active"}`}><i />{project.status}</span></td><td>{project.tasks}</td><td><div className="table-progress"><div className="progress-track"><span style={{ width: `${project.progress}%` }} /></div>{project.progress}%</div></td><td>{projectDateLabel(project.dueDate)}</td><td><button className="icon-button" aria-label={`Abrir ${project.name}`} onClick={() => onOpenProject(project.id)}><ChevronRight size={17} /></button></td></tr>)}</tbody></table></div>}
     {filtered.length === 0 && <div className="empty-state"><FolderKanban size={28} /><strong>Nenhum projeto encontrado</strong><span>Experimente alterar os filtros ou crie um novo projeto.</span><button className="button primary" onClick={onNew}><Plus size={16} /> Novo projeto</button></div>}<div className="page-footnote"><span>{filtered.length} projetos exibidos</span><span>{search ? `Filtro por nome: “${search}”` : "Dados salvos no banco selecionado"}</span></div></div>;
 }
 
@@ -486,7 +492,7 @@ function UsersView({ users, onNew, onEdit }: { users: User[]; onNew: () => void;
   return <div className="page-stack"><div className="page-heading"><div><div className="eyebrow">EQUIPE E ACESSOS</div><h1>Usuários</h1><p>Gerencie os membros, seus papéis e o acesso ao workspace.</p></div><button className="button primary" onClick={onNew}><Plus size={16} /> Adicionar usuário</button></div><div className="toolbar"><div className="search-box user-search"><Search size={15} /><input aria-label="Buscar usuários" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou e-mail" /></div><div className="toolbar-right"><select className="select-button" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select><button className="button secondary" onClick={() => { setFilter("Todos"); setSearch(""); }}><SlidersHorizontal size={15} /> Limpar filtros</button></div></div><div className="panel table-panel"><table><thead><tr><th>Usuário</th><th>Perfil de acesso</th><th>Situação</th><th>Acesso</th><th>Última atividade</th><th /></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><div className="user-cell"><div className={`avatar avatar-${user.color}`}>{user.initials}</div><div><strong>{user.name}</strong><small>{user.email || "Sem e-mail"}</small><small>{[user.jobTitle, user.phone].filter(Boolean).join(" · ")}</small></div></div></td><td><span className="role-pill">{user.accessRole}</span></td><td><span className={`status-pill ${user.status === "Ativo" ? "active" : "inactive"}`}><i />{user.status}</span></td><td><span className={`status-pill ${user.status === "Ativo" && user.hasAccess ? "active" : "inactive"}`}><i />{user.status === "Inativo" ? "Desativado" : user.hasAccess ? "Habilitado" : "Senha pendente"}</span></td><td className="muted">—</td><td><button className="icon-button" onClick={() => onEdit(user)} title="Editar dados, situação e senha do usuário" aria-label={`Editar ${user.name}`}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><UsersIcon size={26} /><strong>Nenhum usuário encontrado</strong></div>}</div><div className="page-footnote"><span>{filtered.length} de {users.length} usuários</span><span>Cadastro do workspace</span></div></div>;
 }
 
-function SettingsView({ user, saved, theme, onTheme, onSaveProfile, onSavePreferences }: { user: User | null; saved: boolean; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; onSaveProfile: (profile: Pick<User, "name" | "email" | "jobTitle" | "phone">) => Promise<void>; onSavePreferences: () => void }) {
+function SettingsView({ user, saved, onSaveProfile, onSavePreferences }: { user: User | null; saved: boolean; onSaveProfile: (profile: Pick<User, "name" | "email" | "jobTitle" | "phone">) => Promise<void>; onSavePreferences: () => void }) {
   const [section, setSection] = useState("Perfil");
   const [profile, setProfile] = useState({ name: "", email: "", jobTitle: "", phone: "" });
   useEffect(() => { setProfile({ name: user?.name ?? "", email: user?.email ?? "", jobTitle: user?.jobTitle ?? "", phone: user?.phone ?? "" }); }, [user]);
@@ -500,7 +506,7 @@ function SettingsView({ user, saved, theme, onTheme, onSaveProfile, onSavePrefer
           <div className="profile-edit"><div className={`avatar avatar-${user?.color ?? "purple"} avatar-large`}>{user?.initials ?? "AA"}</div><div><strong>Foto do perfil</strong><p>JPG ou PNG. Recomendado: 256 × 256 px.</p><button className="button secondary small" onClick={() => undefined}>Alterar foto</button></div></div>
           <div className="settings-form-grid"><div className="form-field"><label>Nome completo</label><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></div><div className="form-field"><label>E-mail</label><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" required={Boolean(user?.hasAccess)} /></div><div className="form-field"><label>Cargo</label><input value={profile.jobTitle} onChange={(event) => setProfile({ ...profile, jobTitle: event.target.value })} /></div><div className="form-field"><label>Telefone</label><input value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} type="tel" placeholder="(00) 00000-0000" /></div></div>
         </> : section === "Preferências" ? <>
-          <div className="preference-row"><div><strong>Tema da interface</strong><p>Escolha a aparência do workspace.</p></div><select value={theme} onChange={(event) => onTheme(event.target.value as ThemePreference)}><option>Claro</option><option>Escuro</option><option>Sistema</option></select></div>
+          <div className="preference-row"><div><strong>Tema da interface</strong><p>Manutenção temporária do seletor de tema.</p></div><span className="theme-control-disabled" title="Manutenção, não disponivel"><select aria-label="Tema da interface" value="Claro" disabled><option>Claro</option></select></span></div>
           <div className="preference-row"><div><strong>Formato de data</strong><p>Como as datas serão exibidas.</p></div><select defaultValue="DD/MM/AAAA"><option>DD/MM/AAAA</option><option>AAAA-MM-DD</option></select></div>
           <div className="preference-row"><div><strong>Notificações por e-mail</strong><p>Receba atualizações sobre suas tarefas.</p></div><input type="checkbox" defaultChecked className="check-input" /></div>
         </> : <div className="security-placeholder"><div className="security-icon"><Zap size={22} /></div><h3>Senha administrada pelo site</h3><p>Um administrador pode redefinir sua senha na aba Usuários. A tela de login não oferece recuperação automática.</p><span className="status-pill active"><i />Autenticação ativa</span></div>}
