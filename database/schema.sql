@@ -150,3 +150,20 @@ CREATE INDEX IF NOT EXISTS task_activity_completed_idx ON nexo.task_activity(occ
 CREATE INDEX IF NOT EXISTS task_assignees_user_idx ON nexo.task_assignees(user_id);
 CREATE INDEX IF NOT EXISTS task_tags_tag_idx ON nexo.task_tags(tag_id);
 CREATE INDEX IF NOT EXISTS task_checklist_task_position_idx ON nexo.task_checklist_items(task_id, position);
+
+-- Keep the Nexo schema unavailable to direct Data API roles. Server-side
+-- application connections use the database owner and enforce workspace auth.
+REVOKE ALL ON SCHEMA nexo FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA nexo FROM PUBLIC;
+
+ALTER TABLE nexo.workspace_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.workspace_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.workspace_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.workspace_auth_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.task_activity ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.task_assignees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.task_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nexo.task_checklist_items ENABLE ROW LEVEL SECURITY;
